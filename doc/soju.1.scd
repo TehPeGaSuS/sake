@@ -505,7 +505,7 @@ character.
 
 *channel update* <name> [options...]
 	Update the options of an existing channel. The options are the same as the
-	_network create_ command.
+	_channel create_ command.
 
 *channel delete* <name>
 	Leave and forget a channel.
