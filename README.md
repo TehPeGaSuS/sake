@@ -35,7 +35,7 @@ build with PAM authentication support, set `GOFLAGS="-tags=pam"`.
 
 ## Contributing
 
-Send patches on [Codeberg] or on [GitHub], report bugs on the [issue tracker].
+Send patches on [Codeberg] and report bugs on the [issue tracker].
 Discuss in [#soju on Libera Chat][IRC channel].
 
 ## License
@@ -50,7 +50,6 @@ Copyright (C) 2020 The soju Contributors
 [User-contributed resources]: contrib/README.md
 [development setup]: doc/dev-setup.md
 [Codeberg]: https://codeberg.org/emersion/soju
-[GitHub]: https://github.com/emersion/soju
 [issue tracker]: https://todo.sr.ht/~emersion/soju
 [IRC channel]: ircs://irc.libera.chat/#soju
 [IRCv3]: https://ircv3.net/
