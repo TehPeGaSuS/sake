@@ -50,6 +50,6 @@ Copyright (C) 2020 The soju Contributors
 [User-contributed resources]: contrib/README.md
 [development setup]: doc/dev-setup.md
 [Codeberg]: https://codeberg.org/emersion/soju
-[issue tracker]: https://todo.sr.ht/~emersion/soju
+[issue tracker]: https://codeberg.org/emersion/soju/issues
 [IRC channel]: ircs://irc.libera.chat/#soju
 [IRCv3]: https://ircv3.net/
