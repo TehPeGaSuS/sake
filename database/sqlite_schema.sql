@@ -29,8 +29,9 @@ CREATE TABLE Network (
 	sasl_external_key BLOB,
 	auto_away INTEGER NOT NULL DEFAULT 1,
 	enabled INTEGER NOT NULL DEFAULT 1,
+	source_ip TEXT,
+	tls_insecure INTEGER NOT NULL DEFAULT 0,
 	FOREIGN KEY(user) REFERENCES User(id),
-	UNIQUE(user, addr, nick),
 	UNIQUE(user, name)
 );
 

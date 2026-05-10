@@ -31,7 +31,8 @@ CREATE TABLE "Network" (
 	sasl_external_key BYTEA,
 	auto_away BOOLEAN NOT NULL DEFAULT TRUE,
 	enabled BOOLEAN NOT NULL DEFAULT TRUE,
-	UNIQUE("user", addr, nick),
+	source_ip TEXT,
+	tls_insecure BOOLEAN NOT NULL DEFAULT FALSE,
 	UNIQUE("user", name)
 );
 
