@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/emersion/soju/database"
+	"github.com/TehPeGaSuS/sake/database"
 )
 
 type oauth2 struct {

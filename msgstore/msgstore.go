@@ -10,7 +10,7 @@ import (
 	"git.sr.ht/~sircmpwn/go-bare"
 	"gopkg.in/irc.v4"
 
-	"codeberg.org/emersion/soju/database"
+	"github.com/TehPeGaSuS/sake/database"
 )
 
 type Driver string

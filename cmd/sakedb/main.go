@@ -11,11 +11,11 @@ import (
 
 	"golang.org/x/crypto/ssh/terminal"
 
-	"codeberg.org/emersion/soju/config"
-	"codeberg.org/emersion/soju/database"
+	"github.com/TehPeGaSuS/sake/config"
+	"github.com/TehPeGaSuS/sake/database"
 )
 
-const usage = `usage: sojudb [-config path] <action> [options...]
+const usage = `usage: sakedb [-config path] <action> [options...]
 
 Edit the soju database. Note, the soju daemon must be restarted after database
 changes.

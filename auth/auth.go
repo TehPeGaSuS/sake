@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/http"
 
-	"codeberg.org/emersion/soju/database"
+	"github.com/TehPeGaSuS/sake/database"
 )
 
 const ContextDownstreamAddressKey = "downstream-address"

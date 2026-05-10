@@ -12,10 +12,10 @@ import (
 	"strconv"
 	"strings"
 
-	"codeberg.org/emersion/soju/config"
+	"github.com/TehPeGaSuS/sake/config"
 )
 
-const usage = `usage: sojuctl [-config path] <command>
+const usage = `usage: sakectl [-config path] <command>
 `
 
 func init() {

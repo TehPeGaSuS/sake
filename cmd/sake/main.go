@@ -24,12 +24,12 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
-	"codeberg.org/emersion/soju"
-	"codeberg.org/emersion/soju/auth"
-	"codeberg.org/emersion/soju/config"
-	"codeberg.org/emersion/soju/database"
-	"codeberg.org/emersion/soju/fileupload"
-	"codeberg.org/emersion/soju/identd"
+	"github.com/TehPeGaSuS/sake"
+	"github.com/TehPeGaSuS/sake/auth"
+	"github.com/TehPeGaSuS/sake/config"
+	"github.com/TehPeGaSuS/sake/database"
+	"github.com/TehPeGaSuS/sake/fileupload"
+	"github.com/TehPeGaSuS/sake/identd"
 )
 
 // TCP keep-alive interval for downstream TCP connections

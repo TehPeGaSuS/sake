@@ -16,9 +16,9 @@ import (
 	"git.sr.ht/~sircmpwn/go-bare"
 	"gopkg.in/irc.v4"
 
-	"codeberg.org/emersion/soju/database"
-	"codeberg.org/emersion/soju/msgstore/znclog"
-	"codeberg.org/emersion/soju/xirc"
+	"github.com/TehPeGaSuS/sake/database"
+	"github.com/TehPeGaSuS/sake/msgstore/znclog"
+	"github.com/TehPeGaSuS/sake/xirc"
 )
 
 var ErrCleanup = errors.New("msgstore cleanup error")

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/emersion/soju/auth"
-	"codeberg.org/emersion/soju/database"
+	"github.com/TehPeGaSuS/sake/auth"
+	"github.com/TehPeGaSuS/sake/database"
 )
 
 const maxSize = 50 * 1024 * 1024 // 50 MiB

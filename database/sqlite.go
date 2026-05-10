@@ -19,7 +19,7 @@ import (
 	promcollectors "github.com/prometheus/client_golang/prometheus/collectors"
 	"gopkg.in/irc.v4"
 
-	"codeberg.org/emersion/soju/xirc"
+	"github.com/TehPeGaSuS/sake/xirc"
 )
 
 const SqliteEnabled = true

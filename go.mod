@@ -1,4 +1,4 @@
-module codeberg.org/emersion/soju
+module github.com/TehPeGaSuS/sake
 
 go 1.24.0
 

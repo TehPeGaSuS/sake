@@ -7,7 +7,7 @@ import (
 	"log"
 	"strings"
 
-	"codeberg.org/emersion/soju/database"
+	"github.com/TehPeGaSuS/sake/database"
 )
 
 const usage = `usage: migrate-db <source database> <destination database>

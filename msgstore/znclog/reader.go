@@ -7,8 +7,8 @@ import (
 
 	"gopkg.in/irc.v4"
 
-	"codeberg.org/emersion/soju/database"
-	"codeberg.org/emersion/soju/xirc"
+	"github.com/TehPeGaSuS/sake/database"
+	"github.com/TehPeGaSuS/sake/xirc"
 )
 
 var timestampPrefixLen = len("[01:02:03] ")

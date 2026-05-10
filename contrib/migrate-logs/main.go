@@ -14,9 +14,9 @@ import (
 
 	"gopkg.in/irc.v4"
 
-	"codeberg.org/emersion/soju/database"
-	"codeberg.org/emersion/soju/msgstore"
-	"codeberg.org/emersion/soju/msgstore/znclog"
+	"github.com/TehPeGaSuS/sake/database"
+	"github.com/TehPeGaSuS/sake/msgstore"
+	"github.com/TehPeGaSuS/sake/msgstore/znclog"
 )
 
 const usage = `usage: migrate-logs <source logs> <destination database>

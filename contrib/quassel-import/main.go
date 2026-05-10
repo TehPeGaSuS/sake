@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/emersion/soju/config"
-	"codeberg.org/emersion/soju/database"
-	"codeberg.org/emersion/soju/msgstore"
-	"codeberg.org/emersion/soju/xirc"
+	"github.com/TehPeGaSuS/sake/config"
+	"github.com/TehPeGaSuS/sake/database"
+	"github.com/TehPeGaSuS/sake/msgstore"
+	"github.com/TehPeGaSuS/sake/xirc"
 	"gopkg.in/irc.v4"
 
 	"database/sql"

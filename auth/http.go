@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"codeberg.org/emersion/soju/database"
+	"github.com/TehPeGaSuS/sake/database"
 )
 
 type httpAuth struct {

@@ -11,10 +11,10 @@ import (
 
 	"codeberg.org/emersion/go-scfg"
 
-	"codeberg.org/emersion/soju/auth"
-	"codeberg.org/emersion/soju/database"
-	"codeberg.org/emersion/soju/fileupload"
-	"codeberg.org/emersion/soju/msgstore"
+	"github.com/TehPeGaSuS/sake/auth"
+	"github.com/TehPeGaSuS/sake/database"
+	"github.com/TehPeGaSuS/sake/fileupload"
+	"github.com/TehPeGaSuS/sake/msgstore"
 )
 
 var (

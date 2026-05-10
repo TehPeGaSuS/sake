@@ -12,8 +12,8 @@ import (
 	"strings"
 	"unicode"
 
-	"codeberg.org/emersion/soju/config"
-	"codeberg.org/emersion/soju/database"
+	"github.com/TehPeGaSuS/sake/config"
+	"github.com/TehPeGaSuS/sake/database"
 )
 
 const usage = `usage: znc-import [options...] <znc config path>
@@ -232,7 +232,7 @@ func main() {
 	}
 
 	if usersCreated > 0 {
-		log.Printf("warning: user passwords haven't been imported, please set them with `sojudb change-password <username>`")
+		log.Printf("warning: user passwords haven't been imported, please set them with `sakedb change-password <username>`")
 	}
 
 	log.Printf("imported %v users, %v networks and %v channels", usersImported, networksImported, channelsImported)
