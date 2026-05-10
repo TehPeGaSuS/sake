@@ -210,4 +210,39 @@ var sqliteMigrations = []string{
 		);
 	`,
 	`ALTER TABLE DeviceCertificate ADD COLUMN last_ip TEXT NOT NULL DEFAULT ''`,
+	// sake: drop UNIQUE(user, addr, nick) to allow bouncer chaining,
+	// add source_ip for per-network bindhost, add tls_insecure for
+	// self-signed certificate acceptance
+	`
+		CREATE TABLE NetworkNew (
+			id INTEGER PRIMARY KEY,
+			name TEXT,
+			user INTEGER NOT NULL,
+			addr TEXT NOT NULL,
+			nick TEXT,
+			username TEXT,
+			realname TEXT,
+			certfp TEXT,
+			pass TEXT,
+			connect_commands TEXT,
+			sasl_mechanism TEXT,
+			sasl_plain_username TEXT,
+			sasl_plain_password TEXT,
+			sasl_external_cert BLOB,
+			sasl_external_key BLOB,
+			auto_away INTEGER NOT NULL DEFAULT 1,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			source_ip TEXT,
+			tls_insecure INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY(user) REFERENCES User(id),
+			UNIQUE(user, name)
+		);
+		INSERT INTO NetworkNew SELECT id, name, user, addr, nick, username,
+			realname, certfp, pass, connect_commands, sasl_mechanism,
+			sasl_plain_username, sasl_plain_password, sasl_external_cert,
+			sasl_external_key, auto_away, enabled, NULL, 0
+		FROM Network;
+		DROP TABLE Network;
+		ALTER TABLE NetworkNew RENAME TO Network;
+	`,
 }

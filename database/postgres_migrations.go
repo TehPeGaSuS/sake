@@ -109,4 +109,12 @@ var postgresMigrations = []string{
 		);
 	`,
 	`ALTER TABLE "DeviceCertificate" ADD COLUMN last_ip TEXT NOT NULL DEFAULT ''`,
+	// sake: drop UNIQUE(user, addr, nick) to allow bouncer chaining,
+	// add source_ip for per-network bindhost, add tls_insecure for
+	// self-signed certificate acceptance
+	`
+		ALTER TABLE "Network" DROP CONSTRAINT IF EXISTS "Network_user_addr_nick_key";
+		ALTER TABLE "Network" ADD COLUMN source_ip TEXT;
+		ALTER TABLE "Network" ADD COLUMN tls_insecure BOOLEAN NOT NULL DEFAULT FALSE;
+	`,
 }
