@@ -187,6 +187,8 @@ type Network struct {
 	SASL            SASL
 	AutoAway        bool
 	Enabled         bool
+	SourceIP        string // per-network bind address (like ZNC bindhost)
+	TLSInsecure     bool   // skip TLS certificate verification for this network
 }
 
 func NewNetwork(addr string) *Network {

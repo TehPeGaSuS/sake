@@ -19,7 +19,7 @@ import (
 	promcollectors "github.com/prometheus/client_golang/prometheus/collectors"
 	"gopkg.in/irc.v4"
 
-	"github.com/TehPeGaSuS/sake/xirc"
+	"codeberg.org/emersion/soju/xirc"
 )
 
 const SqliteEnabled = true
@@ -411,7 +411,8 @@ func (db *SqliteDB) ListNetworks(ctx context.Context, userID int64) ([]Network, 
 	rows, err := db.db.QueryContext(ctx, `
 		SELECT id, name, addr, nick, username, realname, certfp, pass,
 			connect_commands, sasl_mechanism, sasl_plain_username, sasl_plain_password,
-			sasl_external_cert, sasl_external_key, auto_away, enabled
+			sasl_external_cert, sasl_external_key, auto_away, enabled,
+			source_ip, tls_insecure
 		FROM Network
 		WHERE user = ?`,
 		userID)
@@ -425,9 +426,11 @@ func (db *SqliteDB) ListNetworks(ctx context.Context, userID int64) ([]Network, 
 		var net Network
 		var name, nick, username, realname, certfp, pass, connectCommands sql.NullString
 		var saslMechanism, saslPlainUsername, saslPlainPassword sql.NullString
+		var sourceIP sql.NullString
 		err := rows.Scan(&net.ID, &name, &net.Addr, &nick, &username, &realname, &certfp,
 			&pass, &connectCommands, &saslMechanism, &saslPlainUsername, &saslPlainPassword,
-			&net.SASL.External.CertBlob, &net.SASL.External.PrivKeyBlob, &net.AutoAway, &net.Enabled)
+			&net.SASL.External.CertBlob, &net.SASL.External.PrivKeyBlob, &net.AutoAway, &net.Enabled,
+			&sourceIP, &net.TLSInsecure)
 		if err != nil {
 			return nil, err
 		}
@@ -443,6 +446,7 @@ func (db *SqliteDB) ListNetworks(ctx context.Context, userID int64) ([]Network, 
 		net.SASL.Mechanism = saslMechanism.String
 		net.SASL.Plain.Username = saslPlainUsername.String
 		net.SASL.Plain.Password = saslPlainPassword.String
+		net.SourceIP = sourceIP.String
 		networks = append(networks, net)
 	}
 	if err := rows.Err(); err != nil {
@@ -488,6 +492,8 @@ func (db *SqliteDB) StoreNetwork(ctx context.Context, userID int64, network *Net
 		sql.Named("sasl_external_key", network.SASL.External.PrivKeyBlob),
 		sql.Named("auto_away", network.AutoAway),
 		sql.Named("enabled", network.Enabled),
+		sql.Named("source_ip", toNullString(network.SourceIP)),
+		sql.Named("tls_insecure", network.TLSInsecure),
 
 		sql.Named("id", network.ID), // only for UPDATE
 		sql.Named("user", userID),   // only for INSERT
@@ -501,17 +507,20 @@ func (db *SqliteDB) StoreNetwork(ctx context.Context, userID int64, network *Net
 				realname = :realname, certfp = :certfp, pass = :pass, connect_commands = :connect_commands,
 				sasl_mechanism = :sasl_mechanism, sasl_plain_username = :sasl_plain_username, sasl_plain_password = :sasl_plain_password,
 				sasl_external_cert = :sasl_external_cert, sasl_external_key = :sasl_external_key,
-				auto_away = :auto_away, enabled = :enabled
+				auto_away = :auto_away, enabled = :enabled,
+				source_ip = :source_ip, tls_insecure = :tls_insecure
 			WHERE id = :id`, args...)
 	} else {
 		var res sql.Result
 		res, err = db.db.ExecContext(ctx, `
 			INSERT INTO Network(user, name, addr, nick, username, realname, certfp, pass,
 				connect_commands, sasl_mechanism, sasl_plain_username,
-				sasl_plain_password, sasl_external_cert, sasl_external_key, auto_away, enabled)
+				sasl_plain_password, sasl_external_cert, sasl_external_key, auto_away, enabled,
+				source_ip, tls_insecure)
 			VALUES (:user, :name, :addr, :nick, :username, :realname, :certfp, :pass,
 				:connect_commands, :sasl_mechanism, :sasl_plain_username,
-				:sasl_plain_password, :sasl_external_cert, :sasl_external_key, :auto_away, :enabled)`,
+				:sasl_plain_password, :sasl_external_cert, :sasl_external_key, :auto_away, :enabled,
+				:source_ip, :tls_insecure)`,
 			args...)
 		if err != nil {
 			return err
