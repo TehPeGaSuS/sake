@@ -18,9 +18,9 @@ import (
 	"github.com/SherClockHolmes/webpush-go"
 	"gopkg.in/irc.v4"
 
-	"codeberg.org/emersion/soju/database"
-	"codeberg.org/emersion/soju/msgstore"
-	"codeberg.org/emersion/soju/xirc"
+	"github.com/TehPeGaSuS/sake/database"
+	"github.com/TehPeGaSuS/sake/msgstore"
+	"github.com/TehPeGaSuS/sake/xirc"
 )
 
 type UserUpdateFunc func(record *database.User) error

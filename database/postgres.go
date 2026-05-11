@@ -182,7 +182,7 @@ func (db *PostgresDB) ListUsers(ctx context.Context) ([]User, error) {
 
 	rows, err := db.db.QueryContext(ctx,
 		`SELECT id, username, password, admin, nick, realname, enabled,
-			downstream_interacted_at, max_networks
+			downstream_interacted_at, max_networks, source_ip
 		FROM "User"`)
 	if err != nil {
 		return nil, err
@@ -192,15 +192,16 @@ func (db *PostgresDB) ListUsers(ctx context.Context) ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var user User
-		var password, nick, realname sql.NullString
+		var password, nick, realname, sourceIP sql.NullString
 		var downstreamInteractedAt sql.NullTime
-		if err := rows.Scan(&user.ID, &user.Username, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP); err != nil {
 			return nil, err
 		}
 		user.Password = password.String
 		user.Nick = nick.String
 		user.Realname = realname.String
 		user.DownstreamInteractedAt = downstreamInteractedAt.Time
+		user.SourceIP = sourceIP.String
 		users = append(users, user)
 	}
 	if err := rows.Err(); err != nil {
@@ -216,20 +217,21 @@ func (db *PostgresDB) GetUser(ctx context.Context, username string) (*User, erro
 
 	user := &User{Username: username}
 
-	var password, nick, realname sql.NullString
+	var password, nick, realname, sourceIP sql.NullString
 	var downstreamInteractedAt sql.NullTime
 	row := db.db.QueryRowContext(ctx,
-		`SELECT id, password, admin, nick, realname, enabled, downstream_interacted_at, max_networks
+		`SELECT id, password, admin, nick, realname, enabled, downstream_interacted_at, max_networks, source_ip
 		FROM "User"
 		WHERE username = $1`,
 		username)
-	if err := row.Scan(&user.ID, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks); err != nil {
+	if err := row.Scan(&user.ID, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP); err != nil {
 		return nil, err
 	}
 	user.Password = password.String
 	user.Nick = nick.String
 	user.Realname = realname.String
 	user.DownstreamInteractedAt = downstreamInteractedAt.Time
+	user.SourceIP = sourceIP.String
 	return user, nil
 }
 
@@ -289,19 +291,20 @@ func (db *PostgresDB) StoreUser(ctx context.Context, user *User) error {
 	if user.ID == 0 {
 		err = db.db.QueryRowContext(ctx, `
 			INSERT INTO "User" (username, password, admin, nick, realname,
-				enabled, downstream_interacted_at, max_networks)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+				enabled, downstream_interacted_at, max_networks, source_ip)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			RETURNING id`,
 			user.Username, password, user.Admin, nick, realname, user.Enabled,
-			downstreamInteractedAt, user.MaxNetworks).Scan(&user.ID)
+			downstreamInteractedAt, user.MaxNetworks, toNullString(user.SourceIP)).Scan(&user.ID)
 	} else {
 		_, err = db.db.ExecContext(ctx, `
 			UPDATE "User"
 			SET password = $1, admin = $2, nick = $3, realname = $4,
-				enabled = $5, downstream_interacted_at = $6, max_networks = $7
-			WHERE id = $8`,
+				enabled = $5, downstream_interacted_at = $6, max_networks = $7,
+				source_ip = $8
+			WHERE id = $9`,
 			password, user.Admin, nick, realname, user.Enabled,
-			downstreamInteractedAt, user.MaxNetworks, user.ID)
+			downstreamInteractedAt, user.MaxNetworks, toNullString(user.SourceIP), user.ID)
 	}
 	return err
 }

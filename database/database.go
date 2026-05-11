@@ -117,6 +117,7 @@ type User struct {
 	Enabled                bool
 	DownstreamInteractedAt time.Time
 	MaxNetworks            int
+	SourceIP               string // admin-assigned bind address (like ZNC bindhost), overridable per-network
 }
 
 func NewUser(username string) *User {
@@ -187,7 +188,7 @@ type Network struct {
 	SASL            SASL
 	AutoAway        bool
 	Enabled         bool
-	SourceIP        string // per-network bind address (like ZNC bindhost)
+	SourceIP        string // per-network bind address, overrides user-level SourceIP
 	TLSInsecure     bool   // skip TLS certificate verification for this network
 }
 

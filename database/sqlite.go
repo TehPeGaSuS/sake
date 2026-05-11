@@ -174,7 +174,7 @@ func (db *SqliteDB) ListUsers(ctx context.Context) ([]User, error) {
 
 	rows, err := db.db.QueryContext(ctx,
 		`SELECT id, username, password, admin, nick, realname, enabled,
-			downstream_interacted_at, max_networks
+			downstream_interacted_at, max_networks, source_ip
 		FROM User`)
 	if err != nil {
 		return nil, err
@@ -184,15 +184,16 @@ func (db *SqliteDB) ListUsers(ctx context.Context) ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var user User
-		var password, nick, realname sql.NullString
+		var password, nick, realname, sourceIP sql.NullString
 		var downstreamInteractedAt sqliteTime
-		if err := rows.Scan(&user.ID, &user.Username, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP); err != nil {
 			return nil, err
 		}
 		user.Password = password.String
 		user.Nick = nick.String
 		user.Realname = realname.String
 		user.DownstreamInteractedAt = downstreamInteractedAt.Time
+		user.SourceIP = sourceIP.String
 		users = append(users, user)
 	}
 	if err := rows.Err(); err != nil {
@@ -208,21 +209,22 @@ func (db *SqliteDB) GetUser(ctx context.Context, username string) (*User, error)
 
 	user := &User{Username: username}
 
-	var password, nick, realname sql.NullString
+	var password, nick, realname, sourceIP sql.NullString
 	var downstreamInteractedAt sqliteTime
 	row := db.db.QueryRowContext(ctx,
 		`SELECT id, password, admin, nick, realname, enabled,
-			downstream_interacted_at, max_networks
+			downstream_interacted_at, max_networks, source_ip
 		FROM User
 		WHERE username = ?`,
 		username)
-	if err := row.Scan(&user.ID, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks); err != nil {
+	if err := row.Scan(&user.ID, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP); err != nil {
 		return nil, err
 	}
 	user.Password = password.String
 	user.Nick = nick.String
 	user.Realname = realname.String
 	user.DownstreamInteractedAt = downstreamInteractedAt.Time
+	user.SourceIP = sourceIP.String
 	return user, nil
 }
 
@@ -283,6 +285,7 @@ func (db *SqliteDB) StoreUser(ctx context.Context, user *User) error {
 		sql.Named("now", sqliteTime{time.Now()}),
 		sql.Named("downstream_interacted_at", sqliteTime{user.DownstreamInteractedAt}),
 		sql.Named("max_networks", user.MaxNetworks),
+		sql.Named("source_ip", toNullString(user.SourceIP)),
 	}
 
 	var err error
@@ -292,7 +295,7 @@ func (db *SqliteDB) StoreUser(ctx context.Context, user *User) error {
 			SET password = :password, admin = :admin, nick = :nick,
 				realname = :realname, enabled = :enabled,
 				downstream_interacted_at = :downstream_interacted_at,
-				max_networks = :max_networks
+				max_networks = :max_networks, source_ip = :source_ip
 			WHERE username = :username`,
 			args...)
 	} else {
@@ -300,9 +303,9 @@ func (db *SqliteDB) StoreUser(ctx context.Context, user *User) error {
 		res, err = db.db.ExecContext(ctx, `
 			INSERT INTO
 			User(username, password, admin, nick, realname, created_at,
-				enabled, downstream_interacted_at, max_networks)
+				enabled, downstream_interacted_at, max_networks, source_ip)
 			VALUES (:username, :password, :admin, :nick, :realname, :now,
-				:enabled, :downstream_interacted_at, :max_networks)`,
+				:enabled, :downstream_interacted_at, :max_networks, :source_ip)`,
 			args...)
 		if err != nil {
 			return err

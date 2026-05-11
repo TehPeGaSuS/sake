@@ -8,7 +8,8 @@ CREATE TABLE User (
 	created_at TEXT NOT NULL,
 	enabled INTEGER NOT NULL DEFAULT 1,
 	downstream_interacted_at TEXT,
-	max_networks INTEGER NOT NULL DEFAULT -1
+	max_networks INTEGER NOT NULL DEFAULT -1,
+	source_ip TEXT
 );
 
 CREATE TABLE Network (

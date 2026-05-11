@@ -8,7 +8,8 @@ CREATE TABLE "User" (
 	created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
 	enabled BOOLEAN NOT NULL DEFAULT TRUE,
 	downstream_interacted_at TIMESTAMP WITH TIME ZONE,
-	max_networks INTEGER NOT NULL DEFAULT -1
+	max_networks INTEGER NOT NULL DEFAULT -1,
+	source_ip TEXT
 );
 
 CREATE TYPE sasl_mechanism AS ENUM ('PLAIN', 'EXTERNAL');

@@ -21,8 +21,8 @@ import (
 	"github.com/emersion/go-sasl"
 	"gopkg.in/irc.v4"
 
-	"codeberg.org/emersion/soju/database"
-	"codeberg.org/emersion/soju/xirc"
+	"github.com/TehPeGaSuS/sake/database"
+	"github.com/TehPeGaSuS/sake/xirc"
 )
 
 const contextSourceBlockedKey = "source-blocked"
@@ -387,12 +387,21 @@ func connectToUpstream(ctx context.Context, network *network) (*upstreamConn, er
 func dialTCP(ctx context.Context, user *user, network *network, addr string) (net.Conn, error) {
 	var dialer net.Dialer
 
-	// sake: per-network source IP (like ZNC bindhost) takes priority.
-	// Falls back to the global upstream-user-ip range if set.
+	// sake: priority chain for source IP (like ZNC bindhost):
+	// 1. per-network source_ip overrides everything
+	// 2. per-user source_ip (admin-assigned) as fallback
+	// 3. global upstream-user-ip range (soju legacy behaviour)
+	// 4. nil — OS picks
 	if network.SourceIP != "" {
 		ip := net.ParseIP(network.SourceIP)
 		if ip == nil {
 			return nil, fmt.Errorf("invalid source_ip %q for network %q", network.SourceIP, network.GetName())
+		}
+		dialer.LocalAddr = &net.TCPAddr{IP: ip}
+	} else if user.User.SourceIP != "" {
+		ip := net.ParseIP(user.User.SourceIP)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid source_ip %q for user %q", user.User.SourceIP, user.User.Username)
 		}
 		dialer.LocalAddr = &net.TCPAddr{IP: ip}
 	} else {
