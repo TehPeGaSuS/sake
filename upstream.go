@@ -21,8 +21,8 @@ import (
 	"github.com/emersion/go-sasl"
 	"gopkg.in/irc.v4"
 
-	"github.com/TehPeGaSuS/sake/database"
-	"github.com/TehPeGaSuS/sake/xirc"
+	"codeberg.org/emersion/soju/database"
+	"codeberg.org/emersion/soju/xirc"
 )
 
 const contextSourceBlockedKey = "source-blocked"
@@ -286,7 +286,11 @@ func connectToUpstream(ctx context.Context, network *network) (*upstreamConn, er
 			logger.Printf("using TLS client certificate %x", sha256.Sum256(network.SASL.External.CertBlob))
 		}
 
-		if network.CertFP != "" {
+		if network.TLSInsecure {
+			// sake: user explicitly opted out of TLS verification for this network
+			tlsConfig.InsecureSkipVerify = true
+			logger.Printf("TLS certificate verification disabled for network %q", network.GetName())
+		} else if network.CertFP != "" {
 			tlsConfig.InsecureSkipVerify = true
 			tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 				if len(rawCerts) == 0 {
@@ -321,7 +325,7 @@ func connectToUpstream(ctx context.Context, network *network) (*upstreamConn, er
 		}
 
 		logger.Printf("connecting to TLS server at address %q", addr)
-		netConn, err = dialTCP(ctx, network.user, addr)
+		netConn, err = dialTCP(ctx, network.user, network, addr)
 		if err != nil {
 			return nil, err
 		}
@@ -337,7 +341,7 @@ func connectToUpstream(ctx context.Context, network *network) (*upstreamConn, er
 		}
 
 		logger.Printf("connecting to plain-text server at address %q", addr)
-		netConn, err = dialTCP(ctx, network.user, addr)
+		netConn, err = dialTCP(ctx, network.user, network, addr)
 		if err != nil {
 			return nil, err
 		}
@@ -380,27 +384,38 @@ func connectToUpstream(ctx context.Context, network *network) (*upstreamConn, er
 	return uc, nil
 }
 
-func dialTCP(ctx context.Context, user *user, addr string) (net.Conn, error) {
+func dialTCP(ctx context.Context, user *user, network *network, addr string) (net.Conn, error) {
 	var dialer net.Dialer
-	upstreamUserIPs := user.srv.Config().UpstreamUserIPs
-	if len(upstreamUserIPs) > 0 {
-		host, port, err := net.SplitHostPort(addr)
-		if err != nil {
-			return nil, err
-		}
 
-		ipAddr, err := resolveIPAddr(ctx, host)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve host %q: %v", host, err)
+	// sake: per-network source IP (like ZNC bindhost) takes priority.
+	// Falls back to the global upstream-user-ip range if set.
+	if network.SourceIP != "" {
+		ip := net.ParseIP(network.SourceIP)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid source_ip %q for network %q", network.SourceIP, network.GetName())
 		}
+		dialer.LocalAddr = &net.TCPAddr{IP: ip}
+	} else {
+		upstreamUserIPs := user.srv.Config().UpstreamUserIPs
+		if len(upstreamUserIPs) > 0 {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
 
-		localAddr, err := user.localTCPAddr(ipAddr.IP)
-		if err != nil {
-			return nil, fmt.Errorf("failed to pick local IP for remote host %q: %v", host, err)
+			ipAddr, err := resolveIPAddr(ctx, host)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve host %q: %v", host, err)
+			}
+
+			localAddr, err := user.localTCPAddr(ipAddr.IP)
+			if err != nil {
+				return nil, fmt.Errorf("failed to pick local IP for remote host %q: %v", host, err)
+			}
+
+			addr = net.JoinHostPort(ipAddr.String(), port)
+			dialer.LocalAddr = localAddr
 		}
-
-		addr = net.JoinHostPort(ipAddr.String(), port)
-		dialer.LocalAddr = localAddr
 	}
 
 	return dialer.DialContext(ctx, "tcp", addr)
