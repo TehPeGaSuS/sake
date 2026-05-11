@@ -538,6 +538,8 @@ type networkFlagSet struct {
 	AutoAway, Enabled                                  *bool
 	IgnoreLimit                                        bool
 	ConnectCommands                                    []string
+	SourceIP                                           *string
+	TLSInsecure                                        *bool
 }
 
 func newNetworkFlagSet() *networkFlagSet {
@@ -553,10 +555,12 @@ func newNetworkFlagSet() *networkFlagSet {
 	fs.Var(boolPtrFlag{&fs.Enabled}, "enabled", "")
 	fs.BoolVar(&fs.IgnoreLimit, "ignore-limit", false, "")
 	fs.Var((*stringSliceFlag)(&fs.ConnectCommands), "connect-command", "")
+	fs.Var(stringPtrFlag{&fs.SourceIP}, "source-ip", "")
+	fs.Var(boolPtrFlag{&fs.TLSInsecure}, "tls-insecure", "")
 	return fs
 }
 
-func (fs *networkFlagSet) update(network *database.Network) error {
+func (fs *networkFlagSet) update(network *database.Network, isAdmin bool) error {
 	if fs.Addr != nil {
 		if addrParts := strings.SplitN(*fs.Addr, "://", 2); len(addrParts) == 2 {
 			scheme := addrParts[0]
@@ -623,6 +627,16 @@ func (fs *networkFlagSet) update(network *database.Network) error {
 			network.ConnectCommands = fs.ConnectCommands
 		}
 	}
+	// sake: source-ip is admin-only to prevent IP abuse on shared services
+	if fs.SourceIP != nil {
+		if !isAdmin {
+			return fmt.Errorf("you must be an admin to set -source-ip")
+		}
+		network.SourceIP = *fs.SourceIP
+	}
+	if fs.TLSInsecure != nil {
+		network.TLSInsecure = *fs.TLSInsecure
+	}
 	return nil
 }
 
@@ -642,7 +656,7 @@ func handleServiceNetworkCreate(ctx *serviceContext, params []string) error {
 	}
 
 	record := database.NewNetwork(*fs.Addr)
-	if err := fs.update(record); err != nil {
+	if err := fs.update(record, ctx.admin); err != nil {
 		return err
 	}
 
@@ -724,7 +738,7 @@ func handleServiceNetworkUpdate(ctx *serviceContext, params []string) error {
 
 	record := net.Network // copy network record because we'll mutate it
 	wasEnabled := record.Enabled
-	if err := fs.update(&record); err != nil {
+	if err := fs.update(&record, ctx.admin); err != nil {
 		return err
 	}
 
