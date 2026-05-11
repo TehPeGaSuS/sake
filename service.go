@@ -294,14 +294,14 @@ func init() {
 					global: true,
 				},
 				"create": {
-					usage:  "-username <username> -password <password> [-disable-password] [-admin true|false] [-nick <nick>] [-realname <realname>] [-enabled true|false]  [-max-networks <max-networks>]",
-					desc:   "create a new soju user",
+					usage:  "-username <username> -password <password> [-disable-password] [-admin true|false] [-nick <nick>] [-realname <realname>] [-enabled true|false] [-max-networks <max-networks>] [-source-ip <ip>]",
+					desc:   "create a new sake user",
 					handle: handleUserCreate,
 					admin:  true,
 					global: true,
 				},
 				"update": {
-					usage:  "[username] [-password <password>] [-disable-password] [-admin true|false] [-nick <nick>] [-realname <realname>] [-enabled true|false] [-max-networks <max-networks>]",
+					usage:  "[username] [-password <password>] [-disable-password] [-admin true|false] [-nick <nick>] [-realname <realname>] [-enabled true|false] [-max-networks <max-networks>] [-source-ip <ip>]",
 					desc:   "update a user",
 					handle: handleUserUpdate,
 					global: true,
@@ -1051,6 +1051,7 @@ func handleUserCreate(ctx *serviceContext, params []string) error {
 	admin := fs.Bool("admin", false, "")
 	enabled := fs.Bool("enabled", true, "")
 	maxNetworks := fs.Int("max-networks", -1, "")
+	sourceIP := fs.String("source-ip", "", "")
 
 	if err := fs.Parse(params); err != nil {
 		return err
@@ -1067,6 +1068,9 @@ func handleUserCreate(ctx *serviceContext, params []string) error {
 	if *password == "" && !*disablePassword {
 		return fmt.Errorf("flag -password is required")
 	}
+	if *sourceIP != "" && net.ParseIP(*sourceIP) == nil {
+		return fmt.Errorf("flag -source-ip must be a valid IP address")
+	}
 
 	user := database.NewUser(*username)
 	user.Nick = *nick
@@ -1074,6 +1078,7 @@ func handleUserCreate(ctx *serviceContext, params []string) error {
 	user.Admin = *admin
 	user.Enabled = *enabled
 	user.MaxNetworks = *maxNetworks
+	user.SourceIP = *sourceIP
 	if !*disablePassword {
 		if err := user.SetPassword(*password); err != nil {
 			return err
@@ -1095,7 +1100,7 @@ func popArg(params []string) (string, []string) {
 }
 
 func handleUserUpdate(ctx *serviceContext, params []string) error {
-	var password, nick, realname *string
+	var password, nick, realname, sourceIP *string
 	var admin, enabled *bool
 	var disablePassword bool
 	var maxNetworks *int
@@ -1107,6 +1112,7 @@ func handleUserUpdate(ctx *serviceContext, params []string) error {
 	fs.Var(boolPtrFlag{&admin}, "admin", "")
 	fs.Var(boolPtrFlag{&enabled}, "enabled", "")
 	fs.Var(intPtrFlag{&maxNetworks}, "max-networks", "")
+	fs.Var(stringPtrFlag{&sourceIP}, "source-ip", "")
 
 	username, params := popArg(params)
 	if err := fs.Parse(params); err != nil {
@@ -1121,6 +1127,12 @@ func handleUserUpdate(ctx *serviceContext, params []string) error {
 
 	if password != nil && disablePassword {
 		return fmt.Errorf("flags -password and -disable-password are mutually exclusive")
+	}
+	if sourceIP != nil && *sourceIP != "" && net.ParseIP(*sourceIP) == nil {
+		return fmt.Errorf("flag -source-ip must be a valid IP address")
+	}
+	if sourceIP != nil && !ctx.admin {
+		return fmt.Errorf("you must be an admin to set -source-ip")
 	}
 
 	if username != "" && (ctx.user == nil || username != ctx.user.Username) {
@@ -1158,6 +1170,7 @@ func handleUserUpdate(ctx *serviceContext, params []string) error {
 			admin:       admin,
 			enabled:     enabled,
 			maxNetworks: maxNetworks,
+			sourceIP:    sourceIP,
 			done:        done,
 		}
 		select {
@@ -1199,6 +1212,9 @@ func handleUserUpdate(ctx *serviceContext, params []string) error {
 			}
 			if maxNetworks != nil {
 				record.MaxNetworks = *maxNetworks
+			}
+			if sourceIP != nil {
+				record.SourceIP = *sourceIP
 			}
 			return nil
 		})

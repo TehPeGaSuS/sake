@@ -79,6 +79,7 @@ type eventUserUpdate struct {
 	admin       *bool
 	enabled     *bool
 	maxNetworks *int
+	sourceIP    *string // sake: admin-assigned bindhost
 	done        chan error
 }
 
@@ -883,6 +884,9 @@ func (u *user) run() {
 				}
 				if e.maxNetworks != nil {
 					record.MaxNetworks = *e.maxNetworks
+				}
+				if e.sourceIP != nil {
+					record.SourceIP = *e.sourceIP
 				}
 				return nil
 			})
