@@ -257,11 +257,11 @@ var permanentDownstreamCaps = map[string]string{
 	"server-time":       "",
 	"setname":           "",
 
+	"draft/extended-isupport": "",
 	"draft/metadata-2":        "before-connect,max-keys=0,max-value-bytes=1",
+	"draft/no-implicit-names": "",
 	"draft/pre-away":          "",
 	"draft/read-marker":       "",
-	"draft/extended-isupport": "",
-	"draft/no-implicit-names": "",
 
 	"soju.im/account-required":        "",
 	"soju.im/bouncer-networks":        "",

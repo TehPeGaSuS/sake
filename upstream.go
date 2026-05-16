@@ -54,10 +54,11 @@ var permanentUpstreamCaps = map[string]bool{
 // storableMessageTags is the static list of message tags that will cause
 // a TAGMSG to be stored.
 var storableMessageTags = map[string]bool{
+	"+react":   true,
+	"+unreact": true,
+
 	"+draft/react":   true,
-	"+react":         true,
 	"+draft/unreact": true,
-	"+unreact":       true,
 }
 
 type registrationError struct {
