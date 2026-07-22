@@ -542,7 +542,8 @@ func (uc *upstreamConn) enqueueCommand(ctx context.Context, dc *downstreamConn, 
 
 	// If we didn't get a reply after a while, just give up
 	// TODO: consider sending an abort reply to downstream
-	if t := uc.pendingCmds[msg.Command][0].sentAt; !t.IsZero() && time.Since(t) > 30*time.Second {
+	if topCmd := uc.pendingCmds[msg.Command][0]; !topCmd.sentAt.IsZero() && time.Since(topCmd.sentAt) > 30*time.Second {
+		uc.logger.Printf("timed out waiting for reply to pending command: %v", topCmd)
 		copy(uc.pendingCmds[msg.Command], uc.pendingCmds[msg.Command][1:])
 	}
 
