@@ -2,6 +2,7 @@ package soju
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"reflect"
@@ -301,6 +302,7 @@ func testChatHistory(t *testing.T, msgStoreDriver msgstore.Driver, msgStorePath 
 		After   time.Time
 		Between [2]time.Time
 		Around  time.Time
+		Limit   int
 		Texts   []string
 	}{
 		{
@@ -319,6 +321,12 @@ func testChatHistory(t *testing.T, msgStoreDriver msgstore.Driver, msgStorePath 
 			Texts:  texts[0:1],
 		},
 		{
+			Name:   "before_with_limit",
+			Before: baseTime.Add(time.Duration(len(texts)-1) * time.Second),
+			Limit:  1,
+			Texts:  texts[1:2],
+		},
+		{
 			Name:  "after_all",
 			After: baseTime.Add(-time.Second),
 			Texts: texts,
@@ -332,6 +340,12 @@ func testChatHistory(t *testing.T, msgStoreDriver msgstore.Driver, msgStorePath 
 			Name:  "after_all_but_first",
 			After: baseTime,
 			Texts: texts[1:],
+		},
+		{
+			Name:  "after_with_limit",
+			After: baseTime,
+			Limit: 1,
+			Texts: texts[1:2],
 		},
 		{
 			Name: "between_all",
@@ -398,23 +412,43 @@ func testChatHistory(t *testing.T, msgStoreDriver msgstore.Driver, msgStorePath 
 			Texts: texts[:2],
 		},
 		{
+			Name: "between_with_limit",
+			Between: [2]time.Time{
+				baseTime,
+				baseTime.Add(time.Duration(len(texts)) * time.Second),
+			},
+			Limit: 1,
+			Texts: texts[1:2],
+		},
+		{
 			Name:   "around_all",
 			Around: baseTime.Add(time.Second),
 			Texts:  texts,
+		},
+		{
+			Name:   "around_with_limit",
+			Around: baseTime.Add(time.Second + 500*time.Millisecond),
+			Limit:  2,
+			Texts:  texts[1:3],
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
+			limit := "100"
+			if tc.Limit != 0 {
+				limit = fmt.Sprintf("%v", tc.Limit)
+			}
+
 			if !tc.Before.IsZero() {
 				dc.WriteMessage(&irc.Message{
 					Command: "CHATHISTORY",
-					Params:  []string{"BEFORE", "foo", "timestamp=" + xirc.FormatServerTime(tc.Before), "100"},
+					Params:  []string{"BEFORE", "foo", "timestamp=" + xirc.FormatServerTime(tc.Before), limit},
 				})
 			} else if !tc.After.IsZero() {
 				dc.WriteMessage(&irc.Message{
 					Command: "CHATHISTORY",
-					Params:  []string{"AFTER", "foo", "timestamp=" + xirc.FormatServerTime(tc.After), "100"},
+					Params:  []string{"AFTER", "foo", "timestamp=" + xirc.FormatServerTime(tc.After), limit},
 				})
 			} else if !tc.Between[0].IsZero() {
 				dc.WriteMessage(&irc.Message{
@@ -424,13 +458,13 @@ func testChatHistory(t *testing.T, msgStoreDriver msgstore.Driver, msgStorePath 
 						"foo",
 						"timestamp=" + xirc.FormatServerTime(tc.Between[0]),
 						"timestamp=" + xirc.FormatServerTime(tc.Between[1]),
-						"100",
+						limit,
 					},
 				})
 			} else if !tc.Around.IsZero() {
 				dc.WriteMessage(&irc.Message{
 					Command: "CHATHISTORY",
-					Params:  []string{"AROUND", "foo", "timestamp=" + xirc.FormatServerTime(tc.Around), "100"},
+					Params:  []string{"AROUND", "foo", "timestamp=" + xirc.FormatServerTime(tc.Around), limit},
 				})
 			} else {
 				panic("no timestamp specified in test case")
