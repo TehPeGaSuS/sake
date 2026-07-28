@@ -297,10 +297,26 @@ func testChatHistory(t *testing.T, msgStoreDriver msgstore.Driver, msgStorePath 
 
 	testCases := []struct {
 		Name   string
+		Before time.Time
 		After  time.Time
 		Around time.Time
 		Texts  []string
 	}{
+		{
+			Name:   "before_all",
+			Before: baseTime.Add(time.Duration(len(texts)) * time.Second),
+			Texts:  texts,
+		},
+		{
+			Name:   "before_none",
+			Before: baseTime,
+			Texts:  nil,
+		},
+		{
+			Name:   "before_first",
+			Before: baseTime.Add(time.Second),
+			Texts:  texts[0:1],
+		},
 		{
 			Name:  "after_all",
 			After: baseTime.Add(-time.Second),
@@ -325,7 +341,12 @@ func testChatHistory(t *testing.T, msgStoreDriver msgstore.Driver, msgStorePath 
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			if !tc.After.IsZero() {
+			if !tc.Before.IsZero() {
+				dc.WriteMessage(&irc.Message{
+					Command: "CHATHISTORY",
+					Params:  []string{"BEFORE", "foo", "timestamp=" + xirc.FormatServerTime(tc.Before), "100"},
+				})
+			} else if !tc.After.IsZero() {
 				dc.WriteMessage(&irc.Message{
 					Command: "CHATHISTORY",
 					Params:  []string{"AFTER", "foo", "timestamp=" + xirc.FormatServerTime(tc.After), "100"},
