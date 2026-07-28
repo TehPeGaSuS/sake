@@ -296,11 +296,12 @@ func testChatHistory(t *testing.T, msgStoreDriver msgstore.Driver, msgStorePath 
 	roundtrip(t, dc) // drain post-connection-registration messages
 
 	testCases := []struct {
-		Name   string
-		Before time.Time
-		After  time.Time
-		Around time.Time
-		Texts  []string
+		Name    string
+		Before  time.Time
+		After   time.Time
+		Between [2]time.Time
+		Around  time.Time
+		Texts   []string
 	}{
 		{
 			Name:   "before_all",
@@ -333,6 +334,70 @@ func testChatHistory(t *testing.T, msgStoreDriver msgstore.Driver, msgStorePath 
 			Texts: texts[1:],
 		},
 		{
+			Name: "between_all",
+			Between: [2]time.Time{
+				baseTime.Add(-time.Second),
+				baseTime.Add(time.Duration(len(texts)) * time.Second),
+			},
+			Texts: texts,
+		},
+		{
+			Name: "between_all_reverse",
+			Between: [2]time.Time{
+				baseTime.Add(time.Duration(len(texts)) * time.Second),
+				baseTime.Add(-time.Second),
+			},
+			Texts: texts,
+		},
+		{
+			Name: "between_middle",
+			Between: [2]time.Time{
+				baseTime,
+				baseTime.Add(time.Duration(len(texts)-1) * time.Second),
+			},
+			Texts: texts[1:2],
+		},
+		{
+			Name: "between_middle_reverse",
+			Between: [2]time.Time{
+				baseTime.Add(time.Duration(len(texts)-1) * time.Second),
+				baseTime,
+			},
+			Texts: texts[1:2],
+		},
+		{
+			Name: "between_last_two",
+			Between: [2]time.Time{
+				baseTime,
+				baseTime.Add(time.Duration(len(texts)) * time.Second),
+			},
+			Texts: texts[1:],
+		},
+		{
+			Name: "between_last_two_reverse",
+			Between: [2]time.Time{
+				baseTime.Add(time.Duration(len(texts)) * time.Second),
+				baseTime,
+			},
+			Texts: texts[1:],
+		},
+		{
+			Name: "between_first_two",
+			Between: [2]time.Time{
+				baseTime.Add(-time.Second),
+				baseTime.Add(time.Duration(len(texts)-1) * time.Second),
+			},
+			Texts: texts[:2],
+		},
+		{
+			Name: "between_first_two_reverse",
+			Between: [2]time.Time{
+				baseTime.Add(time.Duration(len(texts)-1) * time.Second),
+				baseTime.Add(-time.Second),
+			},
+			Texts: texts[:2],
+		},
+		{
 			Name:   "around_all",
 			Around: baseTime.Add(time.Second),
 			Texts:  texts,
@@ -350,6 +415,17 @@ func testChatHistory(t *testing.T, msgStoreDriver msgstore.Driver, msgStorePath 
 				dc.WriteMessage(&irc.Message{
 					Command: "CHATHISTORY",
 					Params:  []string{"AFTER", "foo", "timestamp=" + xirc.FormatServerTime(tc.After), "100"},
+				})
+			} else if !tc.Between[0].IsZero() {
+				dc.WriteMessage(&irc.Message{
+					Command: "CHATHISTORY",
+					Params: []string{
+						"BETWEEN",
+						"foo",
+						"timestamp=" + xirc.FormatServerTime(tc.Between[0]),
+						"timestamp=" + xirc.FormatServerTime(tc.Between[1]),
+						"100",
+					},
 				})
 			} else if !tc.Around.IsZero() {
 				dc.WriteMessage(&irc.Message{
