@@ -856,7 +856,7 @@ func buildWebPushHTTPClient() *http.Client {
 			if err != nil {
 				return err
 			}
-			if parsedIP.IsLoopback() || parsedIP.IsMulticast() || parsedIP.IsPrivate() {
+			if isInternalIP(parsedIP) {
 				return errWebPushToInternalIP
 			}
 			return nil
@@ -871,6 +871,14 @@ func buildWebPushHTTPClient() *http.Client {
 			},
 		},
 	}
+}
+
+func isInternalIP(ip netip.Addr) bool {
+	return ip.IsLoopback() || // localhost, e.g. 127.0.0.1 and ::1
+		ip.IsUnspecified() || // 0.0.0.0 and ::0 redirect to localhost on Linux
+		ip.IsMulticast() ||
+		ip.IsPrivate() || // e.g. 192.168.0.1
+		ip.IsLinkLocalUnicast() // e.g. 169.254.169.254
 }
 
 type userAgentHTTPTransport struct {
