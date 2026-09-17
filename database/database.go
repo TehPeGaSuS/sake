@@ -209,7 +209,7 @@ type Network struct {
 func NewNetwork(addr string) *Network {
 	return &Network{
 		Addr:     addr,
-		AutoAway: true,
+		AutoAway: false,
 		Enabled:  true,
 	}
 }

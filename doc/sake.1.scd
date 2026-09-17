@@ -37,8 +37,9 @@ channel will be detached instead of being left.
 If a network specified in the username doesn't exist, and the network name is a
 valid hostname, the network will be automatically added.
 
-When all clients are disconnected from the bouncer, the user is automatically
-marked as away by default.
+When all clients are disconnected from the bouncer, the user can be
+automatically marked as away (see _-auto-away_ in _network create_/_network
+update_; sake disables this by default, unlike soju).
 
 sake will reload the configuration file, the TLS certificate/key and the MOTD
 file when it receives the HUP signal. The configuration options _listen_, _db_
@@ -372,7 +373,7 @@ character.
 	*-auto-away* true|false
 		Enable or disable the auto-away feature. If the feature is enabled, the
 		user will be marked as away when all clients are disconnected from the
-		bouncer. By default, auto-away is enabled.
+		bouncer. (sake) By default, auto-away is disabled.
 
 	*-enabled* true|false
 		Enable or disable the network. If the network is disabled, the bouncer

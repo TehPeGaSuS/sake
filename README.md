@@ -46,6 +46,9 @@ panel, differences from soju, and the full `sake(1)`/`sakectl(1)` reference.
   recorded in history, but never relayed live to any connected client. Applies
   once at the bouncer regardless of how many clients are attached, unlike a
   per-client ignore list.
+- **Auto-away disabled by default** for new networks (`-auto-away` on
+  `network create`/`network update`) — soju defaults to marking you away
+  when all clients disconnect; sake leaves it off unless you opt in.
 - **Self-service web admin panel** (see below), in the spirit of ZNC's
   webadmin module — a web UI for account/network/channel management that
   soju itself only exposes through the `BouncerServ` IRC service, including

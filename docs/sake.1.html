@@ -57,8 +57,10 @@
 <p class="Pp">If a network specified in the username doesn't exist, and the
     network name is a valid hostname, the network will be automatically
   added.</p>
-<p class="Pp">When all clients are disconnected from the bouncer, the user is
-    automatically marked as away by default.</p>
+<p class="Pp">When all clients are disconnected from the bouncer, the user can
+    be automatically marked as away (see <i>-auto-away</i> in <i>network
+    create</i>/<i>network</i> <i>update</i>; sake disables this by default,
+    unlike soju).</p>
 <p class="Pp">sake will reload the configuration file, the TLS certificate/key
     and the MOTD file when it receives the HUP signal. The configuration options
     <i>listen</i>, <i>db</i> and <i>log</i> cannot be reloaded.</p>
@@ -385,7 +387,7 @@ hostname example.org</pre>
 <p class="Pp"><b>-auto-away</b> true|false</p>
 <div class="Bd-indent">Enable or disable the auto-away feature. If the feature
   is enabled, the user will be marked as away when all clients are disconnected
-  from the bouncer. By default, auto-away is enabled.</div>
+  from the bouncer. (sake) By default, auto-away is disabled.</div>
 <p class="Pp"><b>-enabled</b> true|false</p>
 <div class="Bd-indent">Enable or disable the network. If the network is
   disabled, the bouncer won't connect to it. By default, the network is
