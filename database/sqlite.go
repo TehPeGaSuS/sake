@@ -174,7 +174,8 @@ func (db *SqliteDB) ListUsers(ctx context.Context) ([]User, error) {
 
 	rows, err := db.db.QueryContext(ctx,
 		`SELECT id, username, password, admin, nick, realname, enabled,
-			downstream_interacted_at, max_networks, source_ip
+			downstream_interacted_at, max_networks, source_ip,
+			sasl_external_cert, sasl_external_key
 		FROM User`)
 	if err != nil {
 		return nil, err
@@ -186,7 +187,7 @@ func (db *SqliteDB) ListUsers(ctx context.Context) ([]User, error) {
 		var user User
 		var password, nick, realname, sourceIP sql.NullString
 		var downstreamInteractedAt sqliteTime
-		if err := rows.Scan(&user.ID, &user.Username, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP, &user.SASLExternal.CertBlob, &user.SASLExternal.PrivKeyBlob); err != nil {
 			return nil, err
 		}
 		user.Password = password.String
@@ -213,11 +214,12 @@ func (db *SqliteDB) GetUser(ctx context.Context, username string) (*User, error)
 	var downstreamInteractedAt sqliteTime
 	row := db.db.QueryRowContext(ctx,
 		`SELECT id, password, admin, nick, realname, enabled,
-			downstream_interacted_at, max_networks, source_ip
+			downstream_interacted_at, max_networks, source_ip,
+			sasl_external_cert, sasl_external_key
 		FROM User
 		WHERE username = ?`,
 		username)
-	if err := row.Scan(&user.ID, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP); err != nil {
+	if err := row.Scan(&user.ID, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP, &user.SASLExternal.CertBlob, &user.SASLExternal.PrivKeyBlob); err != nil {
 		return nil, err
 	}
 	user.Password = password.String
@@ -286,6 +288,8 @@ func (db *SqliteDB) StoreUser(ctx context.Context, user *User) error {
 		sql.Named("downstream_interacted_at", sqliteTime{user.DownstreamInteractedAt}),
 		sql.Named("max_networks", user.MaxNetworks),
 		sql.Named("source_ip", toNullString(user.SourceIP)),
+		sql.Named("sasl_external_cert", user.SASLExternal.CertBlob),
+		sql.Named("sasl_external_key", user.SASLExternal.PrivKeyBlob),
 	}
 
 	var err error
@@ -295,7 +299,8 @@ func (db *SqliteDB) StoreUser(ctx context.Context, user *User) error {
 			SET password = :password, admin = :admin, nick = :nick,
 				realname = :realname, enabled = :enabled,
 				downstream_interacted_at = :downstream_interacted_at,
-				max_networks = :max_networks, source_ip = :source_ip
+				max_networks = :max_networks, source_ip = :source_ip,
+				sasl_external_cert = :sasl_external_cert, sasl_external_key = :sasl_external_key
 			WHERE username = :username`,
 			args...)
 	} else {
@@ -303,9 +308,11 @@ func (db *SqliteDB) StoreUser(ctx context.Context, user *User) error {
 		res, err = db.db.ExecContext(ctx, `
 			INSERT INTO
 			User(username, password, admin, nick, realname, created_at,
-				enabled, downstream_interacted_at, max_networks, source_ip)
+				enabled, downstream_interacted_at, max_networks, source_ip,
+				sasl_external_cert, sasl_external_key)
 			VALUES (:username, :password, :admin, :nick, :realname, :now,
-				:enabled, :downstream_interacted_at, :max_networks, :source_ip)`,
+				:enabled, :downstream_interacted_at, :max_networks, :source_ip,
+				:sasl_external_cert, :sasl_external_key)`,
 			args...)
 		if err != nil {
 			return err

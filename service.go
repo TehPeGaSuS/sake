@@ -254,14 +254,19 @@ func init() {
 		"certfp": {
 			children: serviceCommandSet{
 				"generate": {
-					usage:  "[-key-type rsa|ecdsa|ed25519] [-bits N] [-network name]",
+					usage:  "[-key-type rsa|ecdsa|ed25519] [-bits N] [-network name | -default]",
 					desc:   "generate a new self-signed certificate, defaults to using RSA-3072 key",
 					handle: handleServiceCertFPGenerate,
 				},
 				"fingerprint": {
-					usage:  "[-network name]",
+					usage:  "[-network name | -default]",
 					desc:   "show fingerprints of certificate",
 					handle: handleServiceCertFPFingerprints,
+				},
+				"import": {
+					usage:  "[-network name | -default] <path-or-https-url>",
+					desc:   "import an existing certificate and private key (PEM, concatenated) from a local file or an https:// URL",
+					handle: handleServiceCertFPImport,
 				},
 			},
 		},
@@ -820,9 +825,35 @@ func getNetworkFromFlag(ctx *serviceContext, name string) (*network, error) {
 	}
 }
 
+// storeCertKey stores certDER/privKeyDER either on the network selected by
+// netName, or as the calling user's default certificate if isDefault is
+// true. -network and -default are mutually exclusive.
+func storeCertKey(ctx *serviceContext, netName string, isDefault bool, certDER, privKeyDER []byte) error {
+	if isDefault {
+		if netName != "" {
+			return fmt.Errorf("flags -network and -default are mutually exclusive")
+		}
+		return ctx.user.updateUser(ctx, func(record *database.User) error {
+			record.SASLExternal.CertBlob = certDER
+			record.SASLExternal.PrivKeyBlob = privKeyDER
+			return nil
+		})
+	}
+
+	net, err := getNetworkFromFlag(ctx, netName)
+	if err != nil {
+		return err
+	}
+	net.SASL.External.CertBlob = certDER
+	net.SASL.External.PrivKeyBlob = privKeyDER
+	net.SASL.Mechanism = "EXTERNAL"
+	return ctx.srv.db.StoreNetwork(ctx, ctx.user.ID, &net.Network)
+}
+
 func handleServiceCertFPGenerate(ctx *serviceContext, params []string) error {
 	fs := newFlagSet()
 	netName := fs.String("network", "", "select a network")
+	isDefault := fs.Bool("default", false, "set as your user's default certificate")
 	keyType := fs.String("key-type", "rsa", "key type to generate (rsa, ecdsa, ed25519)")
 	bits := fs.Int("bits", 3072, "size of key to generate, meaningful only for RSA")
 
@@ -837,21 +868,12 @@ func handleServiceCertFPGenerate(ctx *serviceContext, params []string) error {
 		return fmt.Errorf("invalid value for -bits")
 	}
 
-	net, err := getNetworkFromFlag(ctx, *netName)
-	if err != nil {
-		return err
-	}
-
 	privKey, cert, err := generateCertFP(*keyType, *bits)
 	if err != nil {
 		return err
 	}
 
-	net.SASL.External.CertBlob = cert
-	net.SASL.External.PrivKeyBlob = privKey
-	net.SASL.Mechanism = "EXTERNAL"
-
-	if err := ctx.srv.db.StoreNetwork(ctx, ctx.user.ID, &net.Network); err != nil {
+	if err := storeCertKey(ctx, *netName, *isDefault, cert, privKey); err != nil {
 		return err
 	}
 
@@ -860,15 +882,58 @@ func handleServiceCertFPGenerate(ctx *serviceContext, params []string) error {
 	return nil
 }
 
+func handleServiceCertFPImport(ctx *serviceContext, params []string) error {
+	fs := newFlagSet()
+	netName := fs.String("network", "", "select a network")
+	isDefault := fs.Bool("default", false, "set as your user's default certificate")
+
+	if err := fs.Parse(params); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("expected exactly one argument")
+	}
+
+	pemBytes, err := readCertKeyPEM(ctx, fs.Arg(0))
+	if err != nil {
+		return err
+	}
+
+	certDER, privKeyDER, err := ParseCertKeyPEM(pemBytes)
+	if err != nil {
+		return err
+	}
+
+	if err := storeCertKey(ctx, *netName, *isDefault, certDER, privKeyDER); err != nil {
+		return err
+	}
+
+	ctx.print("certificate imported")
+	sendCertfpFingerprints(ctx, certDER)
+	return nil
+}
+
 func handleServiceCertFPFingerprints(ctx *serviceContext, params []string) error {
 	fs := newFlagSet()
 	netName := fs.String("network", "", "select a network")
+	isDefault := fs.Bool("default", false, "show your user's default certificate")
 
 	if err := fs.Parse(params); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected argument: %v", fs.Arg(0))
+	}
+
+	if *isDefault {
+		if *netName != "" {
+			return fmt.Errorf("flags -network and -default are mutually exclusive")
+		}
+		if ctx.user.SASLExternal.CertBlob == nil {
+			return fmt.Errorf("no default certificate set for your user")
+		}
+		sendCertfpFingerprints(ctx, ctx.user.SASLExternal.CertBlob)
+		return nil
 	}
 
 	net, err := getNetworkFromFlag(ctx, *netName)
@@ -880,7 +945,15 @@ func handleServiceCertFPFingerprints(ctx *serviceContext, params []string) error
 		return fmt.Errorf("CertFP not set up")
 	}
 
-	sendCertfpFingerprints(ctx, net.SASL.External.CertBlob)
+	certBlob := net.SASL.External.CertBlob
+	if certBlob == nil {
+		certBlob = ctx.user.SASLExternal.CertBlob
+	}
+	if certBlob == nil {
+		return fmt.Errorf("CertFP not set up")
+	}
+
+	sendCertfpFingerprints(ctx, certBlob)
 	return nil
 }
 
@@ -904,7 +977,11 @@ func handleServiceSASLStatus(ctx *serviceContext, params []string) error {
 	case "PLAIN":
 		ctx.print(fmt.Sprintf("SASL PLAIN enabled with username %q", net.SASL.Plain.Username))
 	case "EXTERNAL":
-		ctx.print("SASL EXTERNAL (CertFP) enabled")
+		if net.SASL.External.CertBlob != nil {
+			ctx.print("SASL EXTERNAL (CertFP) enabled, using a per-network certificate")
+		} else {
+			ctx.print("SASL EXTERNAL (CertFP) enabled, using your default certificate")
+		}
 	case "":
 		ctx.print("SASL is disabled")
 	}

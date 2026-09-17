@@ -9,7 +9,9 @@ CREATE TABLE "User" (
 	enabled BOOLEAN NOT NULL DEFAULT TRUE,
 	downstream_interacted_at TIMESTAMP WITH TIME ZONE,
 	max_networks INTEGER NOT NULL DEFAULT -1,
-	source_ip TEXT
+	source_ip TEXT,
+	sasl_external_cert BYTEA,
+	sasl_external_key BYTEA
 );
 
 CREATE TYPE sasl_mechanism AS ENUM ('PLAIN', 'EXTERNAL');

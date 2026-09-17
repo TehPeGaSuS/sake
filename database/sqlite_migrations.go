@@ -247,4 +247,10 @@ var sqliteMigrations = []string{
 		DROP TABLE Network;
 		ALTER TABLE NetworkNew RENAME TO Network;
 	`,
+	// sake: default (account-wide) SASL EXTERNAL client certificate, used by
+	// any network without its own SASL configuration
+	`
+		ALTER TABLE User ADD COLUMN sasl_external_cert BLOB;
+		ALTER TABLE User ADD COLUMN sasl_external_key BLOB;
+	`,
 }

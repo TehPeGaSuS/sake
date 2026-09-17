@@ -10,6 +10,14 @@
   <input type="text" name="realname" value="{{.User.Realname}}">
   <label>New password</label>
   <input type="password" name="password" placeholder="(leave blank to keep current password)">
+
+  <label>Default SASL EXTERNAL client certificate <span class="muted">(used by any network that enables SASL EXTERNAL without its own certificate; paste a PEM file with both the certificate and the private key, like ZNC's user.pem)</span></label>
+  {{if .DefaultCertSHA256}}
+  <p class="muted">Certificate set. Register this with services on networks that use it via <code>/msg NickServ CERT ADD {{.DefaultCertSHA512}}</code> (fingerprint algorithm depends on the network - some use SHA-256: <code>{{.DefaultCertSHA256}}</code>).</p>
+  <label><input type="checkbox" name="remove_default_cert"> Remove this default certificate</label>
+  {{end}}
+  <textarea name="default_cert_pem" rows="6" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----&#10;-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+
   {{if .CanSetSourceIP}}
   <h3>Advanced (admin)</h3>
   <label>Default source IP (bind address for all networks, unless overridden)</label>

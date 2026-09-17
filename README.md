@@ -7,7 +7,12 @@ It inherits soju's excellent IRCv3 support, multi-client handling and chat histo
 ## Differences from soju
 
 - Per-network source IP binding (like ZNC's bindhost)
-- `certfp import` — bring your own client certificate instead of generating one
+- `certfp import [-network name | -default] <path-or-https-url>` — bring your own
+  client certificate (PEM, concatenated cert+key) instead of generating one,
+  either for a specific network or as your account-wide default
+- Per-account default SASL EXTERNAL certificate (`certfp generate -default` /
+  `certfp import -default`) — used by any network that enables SASL EXTERNAL
+  without its own certificate, so you don't need to set one up per network
 - Self-signed certificate acceptance per network
 - Removed `UNIQUE(user, addr, nick)` constraint — allows connecting to the same address with the same nick under different network names (bouncer chaining)
 - Self-service web admin panel (see below), in the spirit of ZNC's webadmin module
@@ -28,8 +33,11 @@ existing user's credentials (create one with `sakectl user create` first).
 
 Pages:
 - `/admin/` — dashboard listing your networks
-- `/admin/networks/new`, `/admin/networks/{id}` — add/edit/delete a network
-- `/admin/account` — change your own nick, realname and password
+- `/admin/networks/new`, `/admin/networks/{id}` — add/edit/delete a network,
+  including SASL PLAIN/EXTERNAL setup and pasting a client certificate
+  (concatenated PEM, like ZNC's `user.pem`) or a server TLS pinning fingerprint
+- `/admin/account` — change your own nick, realname, password, and your
+  account-wide default SASL EXTERNAL certificate
 - `/admin/users` — **admin-only**: list, create, edit and delete any user
 
 Security notes:

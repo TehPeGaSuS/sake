@@ -118,6 +118,16 @@ type User struct {
 	DownstreamInteractedAt time.Time
 	MaxNetworks            int
 	SourceIP               string // admin-assigned bind address (like ZNC bindhost), overridable per-network
+
+	// Default TLS client certificate for SASL EXTERNAL authentication, used
+	// by networks that enable SASL EXTERNAL without generating or importing
+	// their own certificate. Same shape as SASL.External on Network.
+	SASLExternal struct {
+		// X.509 certificate in DER form.
+		CertBlob []byte
+		// PKCS#8 private key in DER form.
+		PrivKeyBlob []byte
+	}
 }
 
 func NewUser(username string) *User {

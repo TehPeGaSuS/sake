@@ -21,18 +21,27 @@
   <label>Server password</label>
   <input type="password" name="pass" value="{{.Network.Pass}}" placeholder="(unchanged)">
 
+  <label>Pinned server TLS certificate <span class="muted">(not for login: this only pins the upstream <em>server's</em> certificate instead of checking it against CAs, for self-signed servers. SHA-256 or SHA-512 hex, colons OK)</span></label>
+  <input type="text" name="certfp" value="{{certFPHex .Network.CertFP}}" placeholder="e.g. AA:BB:CC:... or leave blank">
+
+  <label>SASL mechanism</label>
+  <select name="sasl_mechanism">
+    <option value="" {{if eq .Network.SASL.Mechanism ""}}selected{{end}}>None</option>
+    <option value="PLAIN" {{if eq .Network.SASL.Mechanism "PLAIN"}}selected{{end}}>PLAIN (username/password)</option>
+    <option value="EXTERNAL" {{if eq .Network.SASL.Mechanism "EXTERNAL"}}selected{{end}}>EXTERNAL (client certificate)</option>
+  </select>
+
   <div class="row">
     <div><label>SASL PLAIN username</label><input type="text" name="sasl_username" value="{{.Network.SASL.Plain.Username}}"></div>
     <div><label>SASL PLAIN password</label><input type="password" name="sasl_password" value="{{.Network.SASL.Plain.Password}}" placeholder="(unchanged)"></div>
   </div>
 
-  <label>Pinned server TLS certificate <span class="muted">(not for login: this only pins the upstream <em>server's</em> certificate instead of checking it against CAs, for self-signed servers. SHA-256 or SHA-512 hex, colons OK)</span></label>
-  <input type="text" name="certfp" value="{{certFPHex .Network.CertFP}}" placeholder="e.g. AA:BB:CC:... or leave blank">
-
-  <label>Client certificate for SASL EXTERNAL <span class="muted">(identifies you to the network/services; paste a PEM file with both the certificate and the private key, like ZNC's user.pem)</span></label>
+  <label>Client certificate for SASL EXTERNAL <span class="muted">(identifies you to the network/services; paste a PEM file with both the certificate and the private key, like ZNC's user.pem. Leave blank to use your account's default certificate instead)</span></label>
   {{if .ClientCertSHA256}}
-  <p class="muted">Certificate set. Register this with services via <code>/msg NickServ CERT ADD {{.ClientCertSHA512}}</code> (fingerprint algorithm depends on the network - some use SHA-256: <code>{{.ClientCertSHA256}}</code>).</p>
-  <label><input type="checkbox" name="remove_client_cert"> Remove this certificate (falls back to SASL PLAIN or no SASL)</label>
+  <p class="muted">Certificate set for this network. Register with services via <code>/msg NickServ CERT ADD {{.ClientCertSHA512}}</code> (fingerprint algorithm depends on the network - some use SHA-256: <code>{{.ClientCertSHA256}}</code>).</p>
+  <label><input type="checkbox" name="remove_client_cert"> Remove this network's certificate {{if .HasDefaultCert}}(falls back to your account default){{end}}</label>
+  {{else if .HasDefaultCert}}
+  <p class="muted">No certificate set for this network - <a href="/admin/account">your account's default certificate</a> will be used.</p>
   {{end}}
   <textarea name="client_cert_pem" rows="6" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----&#10;-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
 

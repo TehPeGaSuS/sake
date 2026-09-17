@@ -118,11 +118,21 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request, actor 
 
 // --- account (self-service, no admin special case needed: always self) ---
 
-func (h *Handler) handleAccountForm(w http.ResponseWriter, r *http.Request, actor *database.User) {
-	h.render(w, r, "account.html", "My account", actor, "", map[string]any{
+func (h *Handler) renderAccount(w http.ResponseWriter, r *http.Request, actor *database.User, errMsg string) {
+	extra := map[string]any{
 		"User":           actor,
 		"CanSetSourceIP": actor.Admin,
-	})
+	}
+	if len(actor.SASLExternal.CertBlob) > 0 {
+		sha256hex, sha512hex := certFingerprints(actor.SASLExternal.CertBlob)
+		extra["DefaultCertSHA256"] = sha256hex
+		extra["DefaultCertSHA512"] = sha512hex
+	}
+	h.render(w, r, "account.html", "My account", actor, errMsg, extra)
+}
+
+func (h *Handler) handleAccountForm(w http.ResponseWriter, r *http.Request, actor *database.User) {
+	h.renderAccount(w, r, actor, "")
 }
 
 func (h *Handler) handleAccountSave(w http.ResponseWriter, r *http.Request, actor *database.User) {
@@ -133,12 +143,26 @@ func (h *Handler) handleAccountSave(w http.ResponseWriter, r *http.Request, acto
 	}
 	if pw := r.FormValue("password"); pw != "" {
 		if err := actor.SetPassword(pw); err != nil {
-			h.render(w, r, "account.html", "My account", actor, err.Error(), map[string]any{"User": actor, "CanSetSourceIP": actor.Admin})
+			h.renderAccount(w, r, actor, err.Error())
 			return
 		}
 	}
+
+	if r.FormValue("remove_default_cert") == "on" {
+		actor.SASLExternal.CertBlob = nil
+		actor.SASLExternal.PrivKeyBlob = nil
+	} else if pemText := r.FormValue("default_cert_pem"); pemText != "" {
+		certDER, keyDER, err := parseClientCertPEM(pemText)
+		if err != nil {
+			h.renderAccount(w, r, actor, "default certificate: "+err.Error())
+			return
+		}
+		actor.SASLExternal.CertBlob = certDER
+		actor.SASLExternal.PrivKeyBlob = keyDER
+	}
+
 	if err := h.DB.StoreUser(r.Context(), actor); err != nil {
-		h.render(w, r, "account.html", "My account", actor, err.Error(), map[string]any{"User": actor, "CanSetSourceIP": actor.Admin})
+		h.renderAccount(w, r, actor, err.Error())
 		return
 	}
 	http.Redirect(w, r, "/admin/account", http.StatusFound)
@@ -196,23 +220,22 @@ func (h *Handler) handleNetworkForm(w http.ResponseWriter, r *http.Request, acto
 		}
 	}
 
+	h.renderNetwork(w, r, actor, net, target, "")
+}
+
+func (h *Handler) renderNetwork(w http.ResponseWriter, r *http.Request, actor *database.User, net *database.Network, target *database.User, errMsg string) {
 	extra := map[string]any{
 		"Network":        net,
 		"TargetUsername": target.Username,
 		"CanSetAdvanced": actor.Admin,
+		"HasDefaultCert": len(target.SASLExternal.CertBlob) > 0,
 	}
-	if net.SASL.Mechanism == "EXTERNAL" && len(net.SASL.External.CertBlob) > 0 {
+	if len(net.SASL.External.CertBlob) > 0 {
 		sha256hex, sha512hex := certFingerprints(net.SASL.External.CertBlob)
 		extra["ClientCertSHA256"] = sha256hex
 		extra["ClientCertSHA512"] = sha512hex
 	}
-	h.render(w, r, "network.html", "Network", actor, "", extra)
-}
-
-func (h *Handler) renderNetworkError(w http.ResponseWriter, r *http.Request, actor *database.User, net *database.Network, targetUsername, errMsg string) {
-	h.render(w, r, "network.html", "Network", actor, errMsg, map[string]any{
-		"Network": net, "TargetUsername": targetUsername, "CanSetAdvanced": actor.Admin,
-	})
+	h.render(w, r, "network.html", "Network", actor, errMsg, extra)
 }
 
 func (h *Handler) handleNetworkSave(w http.ResponseWriter, r *http.Request, actor *database.User) {
@@ -254,21 +277,13 @@ func (h *Handler) handleNetworkSave(w http.ResponseWriter, r *http.Request, acto
 	if pass := r.FormValue("pass"); pass != "" {
 		net.Pass = pass
 	}
-	if u := r.FormValue("sasl_username"); u != "" {
-		net.SASL.Mechanism = "PLAIN"
-		net.SASL.Plain.Username = u
-	}
-	if p := r.FormValue("sasl_password"); p != "" {
-		net.SASL.Mechanism = "PLAIN"
-		net.SASL.Plain.Password = p
-	}
 	net.AutoAway = r.FormValue("auto_away") == "on"
 	net.Enabled = r.FormValue("enabled") == "on"
 
 	if certFP := r.FormValue("certfp"); certFP != "" {
 		normalized := strings.ToLower(strings.ReplaceAll(certFP, ":", ""))
 		if _, err := hex.DecodeString(normalized); err != nil {
-			h.renderNetworkError(w, r, actor, net, target.Username, "server certificate fingerprint must be hex-encoded")
+			h.renderNetwork(w, r, actor, net, target, "server certificate fingerprint must be hex-encoded")
 			return
 		}
 		switch len(normalized) {
@@ -277,28 +292,49 @@ func (h *Handler) handleNetworkSave(w http.ResponseWriter, r *http.Request, acto
 		case 128:
 			net.CertFP = "sha-512:" + normalized
 		default:
-			h.renderNetworkError(w, r, actor, net, target.Username, "server certificate fingerprint must be a SHA-256 or SHA-512 hash")
+			h.renderNetwork(w, r, actor, net, target, "server certificate fingerprint must be a SHA-256 or SHA-512 hash")
 			return
 		}
 	} else {
 		net.CertFP = ""
 	}
 
+	// SASL EXTERNAL certificate: update it independently of the chosen
+	// mechanism below, so a cert pasted here is preserved even if the
+	// mechanism is temporarily switched away and back.
 	if r.FormValue("remove_client_cert") == "on" {
 		net.SASL.External.CertBlob = nil
 		net.SASL.External.PrivKeyBlob = nil
-		if net.SASL.Mechanism == "EXTERNAL" {
-			net.SASL.Mechanism = ""
-		}
 	} else if clientCertPEM := r.FormValue("client_cert_pem"); clientCertPEM != "" {
 		certDER, keyDER, err := parseClientCertPEM(clientCertPEM)
 		if err != nil {
-			h.renderNetworkError(w, r, actor, net, target.Username, "client certificate: "+err.Error())
+			h.renderNetwork(w, r, actor, net, target, "client certificate: "+err.Error())
 			return
 		}
 		net.SASL.External.CertBlob = certDER
 		net.SASL.External.PrivKeyBlob = keyDER
+	}
+
+	switch mech := r.FormValue("sasl_mechanism"); mech {
+	case "PLAIN":
+		if u := r.FormValue("sasl_username"); u != "" {
+			net.SASL.Plain.Username = u
+		}
+		if p := r.FormValue("sasl_password"); p != "" {
+			net.SASL.Plain.Password = p
+		}
+		net.SASL.Mechanism = "PLAIN"
+	case "EXTERNAL":
+		if net.SASL.External.CertBlob == nil && target.SASLExternal.CertBlob == nil {
+			h.renderNetwork(w, r, actor, net, target, "SASL EXTERNAL requires either a certificate for this network or a default certificate set on the account")
+			return
+		}
 		net.SASL.Mechanism = "EXTERNAL"
+	case "":
+		net.SASL.Mechanism = ""
+	default:
+		h.renderNetwork(w, r, actor, net, target, "unsupported SASL mechanism")
+		return
 	}
 
 	if actor.Admin {
@@ -307,7 +343,7 @@ func (h *Handler) handleNetworkSave(w http.ResponseWriter, r *http.Request, acto
 	}
 
 	if err := h.DB.StoreNetwork(r.Context(), target.ID, net); err != nil {
-		h.renderNetworkError(w, r, actor, net, target.Username, err.Error())
+		h.renderNetwork(w, r, actor, net, target, err.Error())
 		return
 	}
 

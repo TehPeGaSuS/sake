@@ -119,4 +119,10 @@ var postgresMigrations = []string{
 		ALTER TABLE "Network" ADD COLUMN source_ip TEXT;
 		ALTER TABLE "Network" ADD COLUMN tls_insecure BOOLEAN NOT NULL DEFAULT FALSE;
 	`,
+	// sake: default (account-wide) SASL EXTERNAL client certificate, used by
+	// any network without its own SASL configuration
+	`
+		ALTER TABLE "User" ADD COLUMN sasl_external_cert BYTEA;
+		ALTER TABLE "User" ADD COLUMN sasl_external_key BYTEA;
+	`,
 }

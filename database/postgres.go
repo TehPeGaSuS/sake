@@ -182,7 +182,8 @@ func (db *PostgresDB) ListUsers(ctx context.Context) ([]User, error) {
 
 	rows, err := db.db.QueryContext(ctx,
 		`SELECT id, username, password, admin, nick, realname, enabled,
-			downstream_interacted_at, max_networks, source_ip
+			downstream_interacted_at, max_networks, source_ip,
+			sasl_external_cert, sasl_external_key
 		FROM "User"`)
 	if err != nil {
 		return nil, err
@@ -194,7 +195,7 @@ func (db *PostgresDB) ListUsers(ctx context.Context) ([]User, error) {
 		var user User
 		var password, nick, realname, sourceIP sql.NullString
 		var downstreamInteractedAt sql.NullTime
-		if err := rows.Scan(&user.ID, &user.Username, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP, &user.SASLExternal.CertBlob, &user.SASLExternal.PrivKeyBlob); err != nil {
 			return nil, err
 		}
 		user.Password = password.String
@@ -220,11 +221,12 @@ func (db *PostgresDB) GetUser(ctx context.Context, username string) (*User, erro
 	var password, nick, realname, sourceIP sql.NullString
 	var downstreamInteractedAt sql.NullTime
 	row := db.db.QueryRowContext(ctx,
-		`SELECT id, password, admin, nick, realname, enabled, downstream_interacted_at, max_networks, source_ip
+		`SELECT id, password, admin, nick, realname, enabled, downstream_interacted_at, max_networks, source_ip,
+			sasl_external_cert, sasl_external_key
 		FROM "User"
 		WHERE username = $1`,
 		username)
-	if err := row.Scan(&user.ID, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP); err != nil {
+	if err := row.Scan(&user.ID, &password, &user.Admin, &nick, &realname, &user.Enabled, &downstreamInteractedAt, &user.MaxNetworks, &sourceIP, &user.SASLExternal.CertBlob, &user.SASLExternal.PrivKeyBlob); err != nil {
 		return nil, err
 	}
 	user.Password = password.String
@@ -291,20 +293,23 @@ func (db *PostgresDB) StoreUser(ctx context.Context, user *User) error {
 	if user.ID == 0 {
 		err = db.db.QueryRowContext(ctx, `
 			INSERT INTO "User" (username, password, admin, nick, realname,
-				enabled, downstream_interacted_at, max_networks, source_ip)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+				enabled, downstream_interacted_at, max_networks, source_ip,
+				sasl_external_cert, sasl_external_key)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			RETURNING id`,
 			user.Username, password, user.Admin, nick, realname, user.Enabled,
-			downstreamInteractedAt, user.MaxNetworks, toNullString(user.SourceIP)).Scan(&user.ID)
+			downstreamInteractedAt, user.MaxNetworks, toNullString(user.SourceIP),
+			user.SASLExternal.CertBlob, user.SASLExternal.PrivKeyBlob).Scan(&user.ID)
 	} else {
 		_, err = db.db.ExecContext(ctx, `
 			UPDATE "User"
 			SET password = $1, admin = $2, nick = $3, realname = $4,
 				enabled = $5, downstream_interacted_at = $6, max_networks = $7,
-				source_ip = $8
-			WHERE id = $9`,
+				source_ip = $8, sasl_external_cert = $9, sasl_external_key = $10
+			WHERE id = $11`,
 			password, user.Admin, nick, realname, user.Enabled,
-			downstreamInteractedAt, user.MaxNetworks, toNullString(user.SourceIP), user.ID)
+			downstreamInteractedAt, user.MaxNetworks, toNullString(user.SourceIP),
+			user.SASLExternal.CertBlob, user.SASLExternal.PrivKeyBlob, user.ID)
 	}
 	return err
 }

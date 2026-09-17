@@ -268,23 +268,29 @@ func connectToUpstream(ctx context.Context, network *network) (*upstreamConn, er
 
 		tlsConfig := &tls.Config{ServerName: host, NextProtos: []string{"irc"}}
 		if network.SASL.Mechanism == "EXTERNAL" {
-			if network.SASL.External.CertBlob == nil {
+			// sake: fall back to the user's default SASL EXTERNAL certificate
+			// when the network doesn't have its own
+			certBlob, privKeyBlob, source := network.SASL.External.CertBlob, network.SASL.External.PrivKeyBlob, "network"
+			if certBlob == nil {
+				certBlob, privKeyBlob, source = network.user.SASLExternal.CertBlob, network.user.SASLExternal.PrivKeyBlob, "user default"
+			}
+			if certBlob == nil {
 				return nil, fmt.Errorf("missing certificate for authentication")
 			}
-			if network.SASL.External.PrivKeyBlob == nil {
+			if privKeyBlob == nil {
 				return nil, fmt.Errorf("missing private key for authentication")
 			}
-			key, err := x509.ParsePKCS8PrivateKey(network.SASL.External.PrivKeyBlob)
+			key, err := x509.ParsePKCS8PrivateKey(privKeyBlob)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse private key: %v", err)
 			}
 			tlsConfig.Certificates = []tls.Certificate{
 				{
-					Certificate: [][]byte{network.SASL.External.CertBlob},
+					Certificate: [][]byte{certBlob},
 					PrivateKey:  key.(crypto.PrivateKey),
 				},
 			}
-			logger.Printf("using TLS client certificate %x", sha256.Sum256(network.SASL.External.CertBlob))
+			logger.Printf("using %s TLS client certificate %x", source, sha256.Sum256(certBlob))
 		}
 
 		if network.TLSInsecure {

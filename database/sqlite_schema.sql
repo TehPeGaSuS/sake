@@ -9,7 +9,9 @@ CREATE TABLE User (
 	enabled INTEGER NOT NULL DEFAULT 1,
 	downstream_interacted_at TEXT,
 	max_networks INTEGER NOT NULL DEFAULT -1,
-	source_ip TEXT
+	source_ip TEXT,
+	sasl_external_cert BLOB,
+	sasl_external_key BLOB
 );
 
 CREATE TABLE Network (
