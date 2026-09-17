@@ -19,11 +19,10 @@ proxy_wstunnel ssl` on Debian/Ubuntu).
 
 ## sake configuration
 
-Have sake listen for HTTP on a Unix domain socket, so it isn't exposed
-directly:
+Have sake listen for HTTP on localhost:
 
 ```
-listen http+unix:///run/sake/http.sock
+listen http://localhost:3030
 ```
 
 ## Apache virtual host
@@ -42,17 +41,17 @@ listen http+unix:///run/sake/http.sock
     RequestHeader unset Forwarded
 
     # WebSocket (gamja and other web clients)
-    ProxyPass        "/socket" "ws://unix:/run/sake/http.sock|ws://localhost/socket"
-    ProxyPassReverse "/socket" "ws://unix:/run/sake/http.sock|ws://localhost/socket"
+    ProxyPass        "/socket" "ws://localhost:3030/socket"
+    ProxyPassReverse "/socket" "ws://localhost:3030/socket"
 
     # File uploads - keep the body size unlimited (0) for large uploads
-    ProxyPass        "/uploads" "unix:/run/sake/http.sock|http://localhost/uploads"
-    ProxyPassReverse "/uploads" "unix:/run/sake/http.sock|http://localhost/uploads"
+    ProxyPass        "/uploads" "http://localhost:3030/uploads"
+    ProxyPassReverse "/uploads" "http://localhost:3030/uploads"
     LimitRequestBody 0
 
     # Web admin panel
-    ProxyPass        "/admin" "unix:/run/sake/http.sock|http://localhost/admin"
-    ProxyPassReverse "/admin" "unix:/run/sake/http.sock|http://localhost/admin"
+    ProxyPass        "/admin" "http://localhost:3030/admin"
+    ProxyPassReverse "/admin" "http://localhost:3030/admin"
 
     # Serve gamja (or another web client) for everything else
     DocumentRoot /var/www/gamja
@@ -63,20 +62,4 @@ listen http+unix:///run/sake/http.sock
     RewriteEngine On
     RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [END,NE,R=permanent]
 </VirtualHost>
-```
-
-Unix-socket proxying (the `unix:/path|http://...` syntax above) requires
-Apache 2.4.7+ built with `mod_proxy`'s Unix domain socket support, which is
-the default on current distributions.
-
-## Socket file permissions
-
-`/run/sake/http.sock` is created by sake, but needs to be readable/writable
-by the Apache user (`www-data` on Debian/Ubuntu, `apache` on RHEL/Fedora).
-Run sake with a matching group, e.g. via a systemd drop-in on
-[`contrib/sake.service`](sake.service):
-
-```
-[Service]
-Group=www-data
 ```
