@@ -1,16 +1,16 @@
-soju(1)
+sake(1)
 
 # NAME
 
-soju - IRC bouncer
+sake - IRC bouncer
 
 # SYNOPSIS
 
-*soju* [options...]
+*sake* [options...]
 
 # DESCRIPTION
 
-soju is a user-friendly IRC bouncer. It connects to upstream IRC servers on
+sake is a user-friendly IRC bouncer. It connects to upstream IRC servers on
 behalf of the user to provide extra features.
 
 - Multiple separate users sharing the same bouncer, each with their own
@@ -20,7 +20,7 @@ behalf of the user to provide extra features.
 
 To connect to the bouncer, use the bouncer username and password. To use a
 client which doesn't support the _soju.im/bouncer-networks_ IRC extension,
-setup one connection per server configured in soju, and indicate the network
+setup one connection per server configured in sake, and indicate the network
 name in the username: "<username>/<network>". Then channels can be joined and
 parted as if you were directly connected to the upstream server.
 
@@ -40,7 +40,7 @@ valid hostname, the network will be automatically added.
 When all clients are disconnected from the bouncer, the user is automatically
 marked as away by default.
 
-soju will reload the configuration file, the TLS certificate/key and the MOTD
+sake will reload the configuration file, the TLS certificate/key and the MOTD
 file when it receives the HUP signal. The configuration options _listen_, _db_
 and _log_ cannot be reloaded.
 
@@ -121,10 +121,10 @@ The following directives are supported:
 	  and serves pprof runtime profiling data (host must be "localhost"). For
 	  more information, see: <https://pkg.go.dev/net/http/pprof>.
 	- _unix+admin://[path]_ listens on a Unix domain socket for administrative
-	  connections, such as sojuctl (default path: /run/soju/admin)
+	  connections, such as sakectl (default path: /run/sake/admin)
 
 	If the scheme is omitted, "ircs" is assumed. If multiple *listen*
-	directives are specified, soju will listen on each of them.
+	directives are specified, sake will listen on each of them.
 
 *hostname* <name>
 	Server hostname (default: system hostname).
@@ -145,13 +145,13 @@ The following directives are supported:
 
 *db* <driver> <source>
 	Set the database location for user, network and channel storage. By default,
-	a _sqlite3_ database is opened in "./soju.db".
+	a _sqlite3_ database is opened in "./sake.db".
 
 	Supported drivers:
 
 	- _sqlite3_ expects _source_ to be a path to the SQLite file
 	- _postgres_ expects _source_ to be a space-separated list of _key=value_
-	  parameters, e.g. _db postgres "host=/run/postgresql dbname=soju"_. Note
+	  parameters, e.g. _db postgres "host=/run/postgresql dbname=sake"_. Note
 	  that _sslmode_ defaults to _require_. For more information on connection
 	  strings, see:
 	  <https://pkg.go.dev/github.com/lib/pq#hdr-Connection_String_Parameters>.
@@ -184,9 +184,9 @@ The following directives are supported:
 
 	- _fs_ stores uploaded files on disk. _source_ is required.
 	- _http_ stores uploaded files through an external HTTP service. _source_ is
-	  required and must be an HTTP URL. When receiving a file, soju will send an
+	  required and must be an HTTP URL. When receiving a file, sake will send an
 	  HTTP POST request to that URL, sending the file as is in the HTTP request
-	  body; additionally sending the uploader soju username in the
+	  body; additionally sending the uploader sake username in the
 	  _Soju-Username_ header. The HTTP server must respond with an HTTP 201 on
 	  success, with the _Location_ header being set to the URL of the uploaded
 	  file.
@@ -214,9 +214,9 @@ The following directives are supported:
 
 *accept-proxy-unix* true|false
 	Allow proxy connections over Unix domain sockets. This is useful when
-	running soju behind a reverse proxy such as Nginx and using Unix domain
+	running sake behind a reverse proxy such as Nginx and using Unix domain
 	sockets for the upstream connections. Note that any local user with
-	write permissions on the soju socket will be able to forge their
+	write permissions on the sake socket will be able to forge their
 	connection origin when this option is enabled.
 
 	By default, proxy headers received over Unix domain sockets are untrusted.
@@ -306,7 +306,7 @@ The following directives are supported:
 
 # IRC SERVICE
 
-soju exposes an IRC service called *BouncerServ* to manage the bouncer.
+sake exposes an IRC service called *BouncerServ* to manage the bouncer.
 Commands can be sent via regular private messages
 (_/msg BouncerServ <command> [args...]_). Commands may be written in full or
 abbreviated form, for instance *network* can be abbreviated as *net* or just
@@ -382,6 +382,18 @@ character.
 		Ignore the max networks limit for this command.
 		Only admin users can ignore the limit.
 
+	*-source-ip* <ip>
+		(sake) Bind the upstream connection for this network to the given
+		local IP address, overriding the account's default source IP (see
+		_user create_'s _-source-ip_). Only admin users can set this.
+
+	*-tls-insecure* true|false
+		(sake) Skip TLS certificate verification entirely for this network's
+		upstream connection. Useful for self-signed servers where pinning a
+		single fingerprint via _-certfp_ isn't practical, at the cost of
+		losing protection against a different or spoofed certificate. Prefer
+		_-certfp_ when possible.
+
 	*-connect-command* <command>
 		Send the specified quoted string as a raw IRC command right after
 		connecting to the server. This can be used to identify to an account
@@ -401,7 +413,7 @@ character.
 	Update an existing network. The options are the same as the
 	_network create_ command.
 
-	When this command is executed, soju will disconnect and re-connect to the
+	When this command is executed, sake will disconnect and re-connect to the
 	network.
 
 	If _name_ is not specified, the current network is updated.
@@ -542,6 +554,13 @@ character.
 
 	*-network* <name>
 		Select a network. By default, the current network is selected, if any.
+		Mutually exclusive with _-default_.
+
+	*-default*
+		(sake) Set this as the calling user's account-wide default
+		certificate, instead of a per-network one. Any network that enables
+		SASL EXTERNAL (see _sasl set-external_) without a certificate of its
+		own falls back to this default. Mutually exclusive with _-network_.
 
 	*-key-type* <type>
 		Private key algorithm to use. Valid values are: _rsa_, _ecdsa_ and
@@ -550,14 +569,39 @@ character.
 	*-bits* <bits>
 		Size of RSA key to generate. Ignored for other key types.
 
-*certfp fingerprint* [options...]
-	Show SHA-1 and SHA-256 fingerprints for the certificate
-	currently used with the network.
+*certfp import* [-network name | -default] <path-or-https-url>
+	(sake) Import an existing certificate and private key (PEM, concatenated
+	in a single file - the same format as ZNC's _user.pem_, e.g. produced by
+	_openssl req -nodes -newkey rsa:4096 -keyout cert.pem -x509 -out cert.pem_)
+	instead of generating a new one, and use it for SASL EXTERNAL
+	authentication.
+
+	The argument is either a local file path readable by the sake process, or
+	an _https://_ URL.
 
 	Options are:
 
 	*-network* <name>
 		Select a network. By default, the current network is selected, if any.
+		Mutually exclusive with _-default_.
+
+	*-default*
+		Set this as the calling user's account-wide default certificate
+		instead of a per-network one. See _certfp generate_'s _-default_.
+
+*certfp fingerprint* [options...]
+	Show SHA-1, SHA-256 and SHA-512 fingerprints for the certificate
+	currently used with the network, or the account's default certificate.
+
+	Options are:
+
+	*-network* <name>
+		Select a network. By default, the current network is selected, if any.
+		Mutually exclusive with _-default_.
+
+	*-default*
+		(sake) Show the calling user's account-wide default certificate
+		instead of a per-network one.
 
 *sasl status* [options...]
 	Show current SASL status.
@@ -569,6 +613,19 @@ character.
 
 *sasl set-plain* [options...] <username> <password>
 	Set SASL PLAIN credentials.
+
+	Note, reconnection to the upstream network is required to apply the new
+	settings.
+
+	Options are:
+
+	*-network* <name>
+		Select a network. By default, the current network is selected, if any.
+
+*sasl set-external* [options...]
+	(sake) Enable SASL EXTERNAL authentication, using either the network's own
+	certificate (see _certfp generate_/_certfp import_) or the account's
+	default certificate if the network has none of its own.
 
 	Note, reconnection to the upstream network is required to apply the new
 	settings.
@@ -595,7 +652,7 @@ character.
 	If _username_ is specified, statistics are only displayed for this user.
 
 *user create* -username <username> -password <password> [options...]
-	Create a new soju user. Only admin users can create new accounts.
+	Create a new sake user. Only admin users can create new accounts.
 	The _-username_ and _-password_ flags are mandatory.
 
 	Options are:
@@ -631,6 +688,12 @@ character.
 		of 0 means no network, and -1 means to default to the global
 		_max-user-networks_ configuration value.
 
+	*-source-ip* <ip>
+		(sake) Bind all of this user's upstream connections to the given local
+		IP address by default (like ZNC's bindhost), unless overridden per
+		network with _network create_/_network update_'s _-source-ip_. Only
+		admin users can set this.
+
 *user update* [username] [options...]
 	Update a user. The options are the same as the _user create_ command.
 
@@ -646,7 +709,7 @@ character.
 	  updating another user.
 
 *user delete* <username> [confirmation token]
-	Delete a soju user.
+	Delete a sake user.
 
 	Only admins can delete other users.
 
@@ -665,14 +728,15 @@ character.
 
 *server debug* <true|false>
 	Enable/disable debug logging (this will leak sensitive information).
-	This overrides any value passed to soju in _-debug_.
+	This overrides any value passed to sake in _-debug_.
 
 # AUTHORS
 
-Maintained by Simon Ser <contact@emersion.fr>, who is assisted by other
-open-source contributors. For more information about soju development, see
-<https://soju.im>.
+sake is a fork of soju maintained by TehPeGaSuS. soju itself is maintained by
+Simon Ser <contact@emersion.fr> and other open-source contributors; for more
+information about upstream soju, see <https://soju.im>. For sake-specific
+changes and issues, see <https://github.com/TehPeGaSuS/sake>.
 
 # SEE ALSO
 
-*sojuctl*(1)
+*sakectl*(1)

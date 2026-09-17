@@ -19,7 +19,7 @@ import (
 
 var (
 	DefaultPath          string
-	DefaultUnixAdminPath = "/run/soju/admin"
+	DefaultUnixAdminPath = "/run/sake/admin"
 )
 
 type IPSet []*net.IPNet
@@ -126,7 +126,7 @@ func Defaults() *Server {
 		},
 		DB: DB{
 			Driver: database.DriverSQLite3,
-			Source: "soju.db",
+			Source: "sake.db",
 		},
 		Auth: []Auth{{
 			Driver: auth.DriverInternal,

@@ -1,3 +1,3 @@
-db sqlite3 /var/lib/soju/main.db
+db sqlite3 /var/lib/sake/main.db
 listen ircs://
 listen unix+admin://

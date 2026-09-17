@@ -1,5 +1,5 @@
 #
-# PAM configuration file for soju. By default, it includes
+# PAM configuration file for sake. By default, it includes
 # the 'login' configuration file (see /etc/pam.d/login)
 #
 

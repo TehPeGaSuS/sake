@@ -1,20 +1,20 @@
 [Unit]
-Description=soju IRC bouncer service
-Documentation=https://soju.im/
-Documentation=man:soju(1) man:sojuctl(1)
+Description=sake IRC bouncer service
+Documentation=https://github.com/TehPeGaSuS/sake
+Documentation=man:sake(1) man:sakectl(1)
 Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=simple
-User=soju
-Group=soju
+User=sake
+Group=sake
 DynamicUser=yes
-StateDirectory=soju
-ConfigurationDirectory=soju
-RuntimeDirectory=soju
+StateDirectory=sake
+ConfigurationDirectory=sake
+RuntimeDirectory=sake
 AmbientCapabilities=CAP_NET_BIND_SERVICE
-ExecStart=/usr/bin/soju
+ExecStart=/usr/bin/sake
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 

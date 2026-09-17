@@ -226,7 +226,7 @@ func init() {
 		"network": {
 			children: serviceCommandSet{
 				"create": {
-					usage:  "-addr <addr> [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-connect-command command]...",
+					usage:  "-addr <addr> [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-source-ip ip] [-tls-insecure true|false] [-connect-command command]...",
 					desc:   "add a new network",
 					handle: handleServiceNetworkCreate,
 				},
@@ -235,7 +235,7 @@ func init() {
 					handle: handleServiceNetworkStatus,
 				},
 				"update": {
-					usage:  "[name] [-addr addr] [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-connect-command command]...",
+					usage:  "[name] [-addr addr] [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-source-ip ip] [-tls-insecure true|false] [-connect-command command]...",
 					desc:   "update a network",
 					handle: handleServiceNetworkUpdate,
 				},
@@ -281,6 +281,11 @@ func init() {
 					usage:  "[-network name] <username> <password>",
 					desc:   "set SASL PLAIN credentials",
 					handle: handleServiceSASLSetPlain,
+				},
+				"set-external": {
+					usage:  "[-network name]",
+					desc:   "enable SASL EXTERNAL authentication, using either the network's own certificate or your user's default certificate",
+					handle: handleServiceSASLSetExternal,
 				},
 				"reset": {
 					usage:  "[-network name]",
@@ -1025,6 +1030,36 @@ func handleServiceSASLSetPlain(ctx *serviceContext, params []string) error {
 	}
 
 	ctx.print("credentials saved")
+	return nil
+}
+
+func handleServiceSASLSetExternal(ctx *serviceContext, params []string) error {
+	fs := newFlagSet()
+	netName := fs.String("network", "", "select a network")
+
+	if err := fs.Parse(params); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected argument: %v", fs.Arg(0))
+	}
+
+	net, err := getNetworkFromFlag(ctx, *netName)
+	if err != nil {
+		return err
+	}
+
+	if net.SASL.External.CertBlob == nil && ctx.user.SASLExternal.CertBlob == nil {
+		return fmt.Errorf("no per-network certificate has been generated/imported, and no default certificate is set for your user (see \"certfp generate -default\"/\"certfp import -default\")")
+	}
+
+	net.SASL.Mechanism = "EXTERNAL"
+
+	if err := ctx.srv.db.StoreNetwork(ctx, ctx.user.ID, &net.Network); err != nil {
+		return err
+	}
+
+	ctx.print("SASL EXTERNAL enabled")
 	return nil
 }
 
