@@ -14,7 +14,7 @@ supported.
   - `migrate-db`
   - `migrate-logs`
   - `znc-import`
-- [systemd service file](soju.service)
+- [systemd service file](sake.service)
 - Third-party tools
   - [chathistorysync]: A synchronization tool for IRC chat history
   - [Convoyeur]: IRCv3 FILEHOST extension adapter to external file upload services

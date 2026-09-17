@@ -17,7 +17,7 @@ import (
 
 const usage = `usage: sakedb [-config path] <action> [options...]
 
-Edit the soju database. Note, the soju daemon must be restarted after database
+Edit the sake database. Note, the sake daemon must be restarted after database
 changes.
 
 Commands:

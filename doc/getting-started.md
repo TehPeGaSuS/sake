@@ -2,35 +2,39 @@
 
 ## Server side
 
-Start by installing soju via your distribution's [package manager]. A container
-image is published as [`codeberg.org/emersion/soju`]. Alternatively, you can
-compile it from source (see the [README]).
+Build sake from source (see the [README]) — there's no distribution package or
+container image for this fork yet.
 
-soju's configuration file (located at `/etc/soju/config`) needs to be adjusted
-to enable TLS. This can be done in several ways:
+sake's configuration file (located at `/etc/sake/config` by default, see
+[`config.in`](../config.in)) needs to be adjusted to enable TLS. This can be
+done in several ways:
 
 - By setting up a reverse proxy which takes care of terminating TLS
-  connections, and configuring soju to listen on local unencrypted connections
+  connections, and configuring sake to listen on local unencrypted connections
   on port 6667:
 
       listen irc://localhost
 
-- By specifying the path to the TLS certificate in the soju configuration file:
+- By specifying the path to the TLS certificate in the sake configuration file:
 
       tls <cert> <key>
 
-  The certificate must be readable by soju, and soju needs to be reloaded when
+  The certificate must be readable by sake, and sake needs to be reloaded when
   the certificate is renewed.
 
 Some [user-contributed guides] are available for popular reverse proxies and
-TLS certificate tools.
+TLS certificate tools (written for soju, but equally applicable to sake).
 
 Next, create an initial user:
 
-    sojudb create-user <soju username> -admin
+    sakedb create-user <username> -admin
 
-Once TLS is set up and an initial user has been created, soju can be started
-(e.g. via systemd or another supervisor daemon).
+(or, if sake is already running with a `listen unix+admin://` directive:
+`sakectl user create -username <username> -admin -password <password>`)
+
+Once TLS is set up and an initial user has been created, sake can be started
+(e.g. via systemd with [`contrib/sake.service`](../contrib/sake.service), or
+another supervisor daemon).
 
 If you're migrating from ZNC, a tool is available to import users, networks and
 channels from a ZNC config file:
@@ -42,38 +46,37 @@ channels from a ZNC config file:
 ### Client supporting `soju.im/bouncer-networks`
 
 If you are using a client supporting the `soju.im/bouncer-networks` IRC
-extension (see the [client list]), then you can just connect to soju with your
+extension (see the [client list]), then you can just connect to sake with your
 username and password.
 
 If your client doesn't provide a UI to manage IRC networks, you can talk to
-`BouncerServ`. See the [man page] or use `/msg BouncerServ help`.
+`BouncerServ`. See the [man page] or use `/msg BouncerServ help`. You can also
+use the [web admin panel](../README.md#web-admin-panel).
 
 ### Other clients
 
 You will need to setup one separate server in your client for each server you
-want soju to connect to.
+want sake to connect to.
 
 The easiest way to get started is to specify the IRC server address directly in
 the username in the client configuration. For example to connect to Libera Chat,
-your username will be: `<soju username>/irc.libera.chat`. Also set your soju
+your username will be: `<username>/irc.libera.chat`. Also set your sake
 password in the password field of your client configuration.
 
-This will autoconfigure soju by adding a network with the address
+This will autoconfigure sake by adding a network with the address
 `irc.libera.chat` and then autoconnect to it. You will now be able to join
 any channel like you would normally do.
 
-For more advanced configuration options, you can talk to `BouncerServ`. See the
-[man page] or use `/msg BouncerServ help`.
+For more advanced configuration options, you can talk to `BouncerServ` or use
+the web admin panel. See the [man page] or use `/msg BouncerServ help`.
 
 If you intend to connect to the bouncer from multiple clients, you will need to
 append a client name in your username. For instance, to connect from a laptop
 and a workstation, you can setup each client to use the respective usernames
-`<soju username>/irc.libera.chat@laptop` and
-`<soju username>/irc.libera.chat@workstation`.
+`<username>/irc.libera.chat@laptop` and
+`<username>/irc.libera.chat@workstation`.
 
-[package manager]: https://repology.org/project/soju/versions
-[`codeberg.org/emersion/soju`]: https://codeberg.org/emersion/-/packages/container/soju/latest
 [README]: ../README.md
 [user-contributed guides]: ../contrib/README.md
-[man page]: https://soju.im/doc/soju.1.html#IRC_SERVICE
+[man page]: ../doc/sake.1.scd
 [client list]: ../contrib/clients.md
