@@ -30,18 +30,24 @@ doc/sakectl.1: doc/sakectl.1.scd
 
 # HTML man pages for GitHub Pages (docs/), mirroring soju.im/doc/soju.1.html.
 # Requires mandoc; not part of `all` since it's docs infra, not a build artifact.
+# scdoc's man-style output has no hyperlink macro, so mandoc renders both
+# cross-references (e.g. "sakectl(1)") and bare URLs/emails as plain text;
+# link them up here rather than fighting scdoc/mandoc for it.
+html_postprocess := sed -E \
+	-e 's,<b>(sake|sakectl)</b>\(1\),<a href="\1.1.html"><b>\1</b>(1)</a>,g' \
+	-e 's,&lt;(https?://[^&]+)&gt;,<a href="\1">\1</a>,g' \
+	-e 's,&lt;([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+)&gt;,<a href="mailto:\1">\1</a>,g'
+
 html: docs/sake.1.html docs/sakectl.1.html
 docs/sake.1.html: doc/sake.1.scd doc/man-style.css
 	mkdir -p docs
 	$(SCDOC) <doc/sake.1.scd | $(MANDOC) -T html -O style=man-style.css | \
-		sed -E 's,<b>(sake|sakectl)</b>\(1\),<a href="\1.1.html"><b>\1</b>(1)</a>,g' \
-		>docs/sake.1.html
+		$(html_postprocess) >docs/sake.1.html
 	cp -f doc/man-style.css docs/man-style.css
 docs/sakectl.1.html: doc/sakectl.1.scd doc/man-style.css
 	mkdir -p docs
 	$(SCDOC) <doc/sakectl.1.scd | $(MANDOC) -T html -O style=man-style.css | \
-		sed -E 's,<b>(sake|sakectl)</b>\(1\),<a href="\1.1.html"><b>\1</b>(1)</a>,g' \
-		>docs/sakectl.1.html
+		$(html_postprocess) >docs/sakectl.1.html
 	cp -f doc/man-style.css docs/man-style.css
 
 clean:
