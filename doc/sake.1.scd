@@ -373,7 +373,7 @@ character.
 	*-auto-away* true|false
 		Enable or disable the auto-away feature. If the feature is enabled, the
 		user will be marked as away when all clients are disconnected from the
-		bouncer. (sake) By default, auto-away is disabled.
+		bouncer (sake). By default, auto-away is disabled.
 
 	*-enabled* true|false
 		Enable or disable the network. If the network is disabled, the bouncer
