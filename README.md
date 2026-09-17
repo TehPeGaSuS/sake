@@ -184,8 +184,8 @@ For development: `go run ./cmd/sake`. Tests: `go test ./...`.
 - [`doc/architecture.md`](doc/architecture.md), [`doc/dev-setup.md`](doc/dev-setup.md) — internals, for contributors
 - [`doc/per-user-ip.md`](doc/per-user-ip.md) — more on source IP binding
 - [`doc/file-upload.md`](doc/file-upload.md) — IRCv3 file upload support
-- [`contrib/`](contrib/) — reverse proxy configs (Caddy, Nginx, tlstunnel,
-  OpenBSD relayd, Certbot), migration tools, and the systemd unit
+- [`contrib/`](contrib/) — reverse proxy configs (Apache, Caddy, Nginx,
+  tlstunnel, OpenBSD relayd, Certbot), migration tools, and the systemd unit
   ([`contrib/sake.service`](contrib/sake.service))
 
 ## License
