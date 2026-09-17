@@ -12,6 +12,7 @@ import (
 	_ "net/http/pprof"
 	"net/url"
 	"os"
+	"path/filepath"
 	"os/signal"
 	"strings"
 	"sync/atomic"
@@ -30,6 +31,7 @@ import (
 	"github.com/TehPeGaSuS/sake/database"
 	"github.com/TehPeGaSuS/sake/fileupload"
 	"github.com/TehPeGaSuS/sake/identd"
+	"github.com/TehPeGaSuS/sake/webadmin"
 )
 
 // TCP keep-alive interval for downstream TCP connections
@@ -210,11 +212,18 @@ func main() {
 		http.ServeFile(w, r, cfg.IconPath)
 	})
 
+	webadminSecretPath := ""
+	if configPath != "" {
+		webadminSecretPath = filepath.Join(filepath.Dir(configPath), "webadmin-secret")
+	}
+	webadminHandler := webadmin.New(db, srv.Config().Auth, webadminSecretPath)
+
 	httpMux := http.NewServeMux()
 	httpMux.Handle("/socket", srv)
 	httpMux.Handle("/uploads", fileUploadHandler)
 	httpMux.Handle("/uploads/", fileUploadHandler)
 	httpMux.Handle("/icon", iconHandler)
+	httpMux.Handle("/admin/", webadminHandler)
 
 	var httpServers []*http.Server
 	for _, listen := range cfg.Listen {

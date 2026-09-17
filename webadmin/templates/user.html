@@ -1,0 +1,26 @@
+{{define "body"}}
+<h1>{{if .Existing}}Edit user: {{.User.Username}}{{else}}Add user{{end}}</h1>
+<form method="post" action="/admin/users/{{if .Existing}}{{.User.Username}}{{else}}new{{end}}">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label>Username</label>
+  <input type="text" name="username" value="{{.User.Username}}" {{if .Existing}}disabled{{end}} required>
+  <label>Password{{if .Existing}} (leave blank to keep current){{end}}</label>
+  <input type="password" name="password" {{if not .Existing}}required{{end}}>
+  <label>Nick</label>
+  <input type="text" name="nick" value="{{.User.Nick}}">
+  <label>Realname</label>
+  <input type="text" name="realname" value="{{.User.Realname}}">
+  <label>Default source IP (bind address)</label>
+  <input type="text" name="source_ip" value="{{.User.SourceIP}}">
+  <label>Max networks (-1 = unlimited)</label>
+  <input type="number" name="max_networks" value="{{.User.MaxNetworks}}">
+  <label><input type="checkbox" name="admin" {{if .User.Admin}}checked{{end}}> Admin</label>
+  <label><input type="checkbox" name="enabled" {{if .User.Enabled}}checked{{end}}> Enabled</label>
+  <div class="actions">
+    <button type="submit">Save</button>
+    {{if .Existing}}<a class="button danger" href="#" onclick="document.getElementById('del').submit(); return false;">Delete</a>{{end}}
+  </div>
+</form>
+{{if .Existing}}<form id="del" method="post" action="/admin/users/{{.User.Username}}/delete"><input type="hidden" name="csrf" value="{{.CSRF}}"></form>{{end}}
+{{end}}
+{{template "layout" .}}

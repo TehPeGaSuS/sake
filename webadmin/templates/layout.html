@@ -1,0 +1,46 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} - sake admin</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; max-width: 860px; margin: 2em auto; padding: 0 1em; color: #222; }
+  nav { display: flex; align-items: center; gap: 1em; margin-bottom: 1.5em; border-bottom: 1px solid #ddd; padding-bottom: .75em; }
+  nav .brand { display: flex; align-items: center; gap: .4em; font-weight: 700; color: #205; margin-right: .4em; }
+  .brand { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: .5em; margin-bottom: 1.5em; color: #205; font-weight: 700; font-size: 1.3em; letter-spacing: .02em; }
+  nav a { color: #205; text-decoration: none; }
+  nav a:hover { text-decoration: underline; }
+  nav form { margin-left: auto; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
+  th, td { text-align: left; padding: .4em .6em; border-bottom: 1px solid #eee; }
+  label { display: block; margin-top: .8em; font-weight: 600; }
+  input[type=text], input[type=password], input[type=number] { width: 100%; padding: .4em; box-sizing: border-box; }
+  input[type=checkbox] { margin-right: .4em; }
+  .row { display: flex; gap: 1em; }
+  .row > div { flex: 1; }
+  .actions { margin-top: 1.5em; display: flex; gap: .6em; }
+  button, .button { padding: .5em 1em; cursor: pointer; }
+  .danger { color: #a00; }
+  .error { color: #a00; background: #fee; border: 1px solid #fbb; padding: .6em; margin-bottom: 1em; }
+  .notice { color: #063; background: #efe; border: 1px solid #bdb; padding: .6em; margin-bottom: 1em; }
+  .muted { color: #777; }
+</style>
+</head>
+<body>
+{{if .Actor}}
+<nav>
+  <span class="brand"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h3.2l.6 3.2H8.9z"/><path d="M8.5 5.7h5.4l1.1 8.6c.15 1.2-.8 2.2-2 2.2h-3.6c-1.2 0-2.15-1-2-2.2z"/><path d="M6 20.2c0-1.5 1.4-2.7 3.2-2.7h1.1"/><ellipse cx="6" cy="20.2" rx="3.2" ry="1.3"/></svg>sake</span>
+  <a href="/admin/">Dashboard</a>
+  <a href="/admin/networks/new">Add network</a>
+  <a href="/admin/account">My account</a>
+  {{if .Actor.Admin}}<a href="/admin/users">Users</a>{{end}}
+  <form method="post" action="/admin/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Log out ({{.Actor.Username}})</button></form>
+</nav>
+{{end}}
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Notice}}<div class="notice">{{.Notice}}</div>{{end}}
+{{template "body" .}}
+</body>
+</html>
+{{end}}

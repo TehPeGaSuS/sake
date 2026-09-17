@@ -1,0 +1,16 @@
+{{define "body"}}
+<h1>Users</h1>
+<table>
+<tr><th>Username</th><th>Admin</th><th>Enabled</th><th></th></tr>
+{{range .Users}}
+<tr>
+  <td>{{.Username}}</td>
+  <td>{{if .Admin}}yes{{else}}no{{end}}</td>
+  <td>{{if .Enabled}}yes{{else}}no{{end}}</td>
+  <td><a href="/admin/users/{{.Username}}">edit</a></td>
+</tr>
+{{end}}
+</table>
+<p><a class="button" href="/admin/users/new">Add user</a></p>
+{{end}}
+{{template "layout" .}}

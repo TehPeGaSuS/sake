@@ -1,0 +1,19 @@
+{{define "body"}}
+<h1>Networks</h1>
+<table>
+<tr><th>Name</th><th>Address</th><th>Nick</th><th>Enabled</th><th></th></tr>
+{{range .Networks}}
+<tr>
+  <td>{{.Name}}</td>
+  <td>{{.Addr}}</td>
+  <td>{{.Nick}}</td>
+  <td>{{if .Enabled}}yes{{else}}no{{end}}</td>
+  <td><a href="/admin/networks/{{.ID}}">edit</a></td>
+</tr>
+{{else}}
+<tr><td colspan="5" class="muted">No networks yet.</td></tr>
+{{end}}
+</table>
+<p><a class="button" href="/admin/networks/new">Add network</a></p>
+{{end}}
+{{template "layout" .}}

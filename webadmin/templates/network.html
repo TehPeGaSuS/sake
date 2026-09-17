@@ -1,0 +1,52 @@
+{{define "body"}}
+<h1>{{if .Network.ID}}Edit network: {{.Network.Name}}{{else}}Add network{{end}}</h1>
+<form method="post" action="/admin/networks/{{if .Network.ID}}{{.Network.ID}}{{else}}new{{end}}">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{if .TargetUsername}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
+  <div class="row">
+    <div>
+      <label>Name (short label, e.g. "libera")</label>
+      <input type="text" name="name" value="{{.Network.Name}}">
+    </div>
+    <div>
+      <label>Address (host:port, irc+insecure://, ircs://...)</label>
+      <input type="text" name="addr" value="{{.Network.Addr}}" required>
+    </div>
+  </div>
+  <div class="row">
+    <div><label>Nick</label><input type="text" name="nick" value="{{.Network.Nick}}"></div>
+    <div><label>Username</label><input type="text" name="username_irc" value="{{.Network.Username}}"></div>
+    <div><label>Realname</label><input type="text" name="realname" value="{{.Network.Realname}}"></div>
+  </div>
+  <label>Server password</label>
+  <input type="password" name="pass" value="{{.Network.Pass}}" placeholder="(unchanged)">
+
+  <div class="row">
+    <div><label>SASL PLAIN username</label><input type="text" name="sasl_username" value="{{.Network.SASL.Plain.Username}}"></div>
+    <div><label>SASL PLAIN password</label><input type="password" name="sasl_password" value="{{.Network.SASL.Plain.Password}}" placeholder="(unchanged)"></div>
+  </div>
+
+  <label><input type="checkbox" name="auto_away" {{if .Network.AutoAway}}checked{{end}}> Auto-away when no clients are attached</label>
+  <label><input type="checkbox" name="enabled" {{if .Network.Enabled}}checked{{end}}> Enabled</label>
+
+  {{if .CanSetAdvanced}}
+  <h3>Advanced (admin)</h3>
+  <div class="row">
+    <div><label>Source IP (bind address, overrides account default)</label><input type="text" name="source_ip" value="{{.Network.SourceIP}}"></div>
+  </div>
+  <label><input type="checkbox" name="tls_insecure" {{if .Network.TLSInsecure}}checked{{end}}> Skip TLS certificate verification</label>
+  {{end}}
+
+  <div class="actions">
+    <button type="submit">Save</button>
+    {{if .Network.ID}}<a class="button danger" href="#" onclick="document.getElementById('del').submit(); return false;">Delete</a>{{end}}
+  </div>
+</form>
+{{if .Network.ID}}
+<form id="del" method="post" action="/admin/networks/{{.Network.ID}}/delete">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{if .TargetUsername}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
+</form>
+{{end}}
+{{end}}
+{{template "layout" .}}

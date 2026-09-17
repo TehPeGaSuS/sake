@@ -1,0 +1,21 @@
+{{define "body"}}
+<h1>My account</h1>
+<form method="post" action="/admin/account">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label>Username</label>
+  <input type="text" value="{{.User.Username}}" disabled>
+  <label>Nick</label>
+  <input type="text" name="nick" value="{{.User.Nick}}">
+  <label>Realname</label>
+  <input type="text" name="realname" value="{{.User.Realname}}">
+  <label>New password</label>
+  <input type="password" name="password" placeholder="(leave blank to keep current password)">
+  {{if .CanSetSourceIP}}
+  <h3>Advanced (admin)</h3>
+  <label>Default source IP (bind address for all networks, unless overridden)</label>
+  <input type="text" name="source_ip" value="{{.User.SourceIP}}">
+  {{end}}
+  <div class="actions"><button type="submit">Save</button></div>
+</form>
+{{end}}
+{{template "layout" .}}
