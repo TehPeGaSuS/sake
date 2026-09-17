@@ -39,9 +39,9 @@ constraints for bouncer chaining, and a self-service web admin panel.
   same address with the same nick under different network names (bouncer
   chaining).
 - **Self-service web admin panel** (see below), in the spirit of ZNC's
-  webadmin module, including channel management (detach/reattach/relay
-  behavior) and per-network connect commands, neither of which soju's
-  IRC-only `BouncerServ` fully exposes today.
+  webadmin module — a web UI for account/network/channel management that
+  soju itself only exposes through the `BouncerServ` IRC service, including
+  channel detach/reattach/relay behavior and per-network connect commands.
 
 ## Quickstart
 
