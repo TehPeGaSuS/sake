@@ -667,6 +667,57 @@ func (db *SqliteDB) DeleteChannel(ctx context.Context, id int64) error {
 	return err
 }
 
+func (db *SqliteDB) ListIgnores(ctx context.Context, networkID int64) ([]Ignore, error) {
+	ctx, cancel := context.WithTimeout(ctx, sqliteQueryTimeout)
+	defer cancel()
+
+	rows, err := db.db.QueryContext(ctx,
+		"SELECT id, mask, created_at FROM Ignore WHERE network = ?", networkID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ignores []Ignore
+	for rows.Next() {
+		var ignore Ignore
+		var createdAt sqliteTime
+		if err := rows.Scan(&ignore.ID, &ignore.Mask, &createdAt); err != nil {
+			return nil, err
+		}
+		ignore.CreatedAt = createdAt.Time
+		ignores = append(ignores, ignore)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ignores, nil
+}
+
+func (db *SqliteDB) StoreIgnore(ctx context.Context, networkID int64, ignore *Ignore) error {
+	ctx, cancel := context.WithTimeout(ctx, sqliteQueryTimeout)
+	defer cancel()
+
+	ignore.CreatedAt = time.Now()
+	res, err := db.db.ExecContext(ctx,
+		"INSERT INTO Ignore(network, mask, created_at) VALUES (?, ?, ?)",
+		networkID, ignore.Mask, sqliteTime{ignore.CreatedAt})
+	if err != nil {
+		return err
+	}
+	ignore.ID, err = res.LastInsertId()
+	return err
+}
+
+func (db *SqliteDB) DeleteIgnore(ctx context.Context, id int64) error {
+	ctx, cancel := context.WithTimeout(ctx, sqliteQueryTimeout)
+	defer cancel()
+
+	_, err := db.db.ExecContext(ctx, "DELETE FROM Ignore WHERE id = ?", id)
+	return err
+}
+
 func (db *SqliteDB) GetDeviceCertificate(ctx context.Context, fingerprint []byte) (int64, *DeviceCertificate, error) {
 	ctx, cancel := context.WithTimeout(ctx, sqliteQueryTimeout)
 	defer cancel()

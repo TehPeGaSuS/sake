@@ -524,6 +524,34 @@ hostname example.org</pre>
   are the same as the <i>channel create</i> command.</div>
 <p class="Pp"><b>channel delete</b> &lt;name&gt;</p>
 <div class="Bd-indent">Leave and forget a channel.</div>
+<p class="Pp"><b>ignore list</b> [-network name]</p>
+<div class="Bd-indent">(sake) Show hostmasks currently ignored on a network.
+<p class="Pp">Options are:</p>
+<p class="Pp"><b>-network</b> &lt;name&gt;</p>
+<div class="Bd-indent">Select a network. By default, the current network is
+  selected, if any.</div>
+</div>
+<p class="Pp"><b>ignore add</b> [-network name] &lt;mask&gt;</p>
+<div class="Bd-indent">(sake) Ignore messages from a hostmask on a network: they
+  are still recorded in history, but never relayed live to any downstream
+  client.
+<p class="Pp"><i>mask</i> is a case-insensitive glob pattern matched against
+    <i>nick!user@host</i> (wildcards * and ? are supported), e.g.
+    *!*@spammer.example.com. A bare nick with no &quot;!&quot; or &quot;@&quot;
+    is expanded to &lt;nick&gt;!*@*.</p>
+<p class="Pp">Options are:</p>
+<p class="Pp"><b>-network</b> &lt;name&gt;</p>
+<div class="Bd-indent">Select a network. By default, the current network is
+  selected, if any.</div>
+</div>
+<p class="Pp"><b>ignore delete</b> [-network name] &lt;mask&gt;</p>
+<div class="Bd-indent">(sake) Remove a previously ignored hostmask. <i>mask</i>
+  must match exactly as shown by <i>ignore list</i>.
+<p class="Pp">Options are:</p>
+<p class="Pp"><b>-network</b> &lt;name&gt;</p>
+<div class="Bd-indent">Select a network. By default, the current network is
+  selected, if any.</div>
+</div>
 <p class="Pp"><b>device-certificate status</b></p>
 <div class="Bd-indent">Show a list of saved device certificates.</div>
 <p class="Pp"><b>device-certificate create</b> [options...]</p>

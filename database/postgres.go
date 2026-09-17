@@ -506,6 +506,49 @@ func (db *PostgresDB) DeleteChannel(ctx context.Context, id int64) error {
 	return err
 }
 
+func (db *PostgresDB) ListIgnores(ctx context.Context, networkID int64) ([]Ignore, error) {
+	ctx, cancel := context.WithTimeout(ctx, postgresQueryTimeout)
+	defer cancel()
+
+	rows, err := db.db.QueryContext(ctx,
+		`SELECT id, mask, created_at FROM "Ignore" WHERE network = $1`, networkID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ignores []Ignore
+	for rows.Next() {
+		var ignore Ignore
+		if err := rows.Scan(&ignore.ID, &ignore.Mask, &ignore.CreatedAt); err != nil {
+			return nil, err
+		}
+		ignores = append(ignores, ignore)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ignores, nil
+}
+
+func (db *PostgresDB) StoreIgnore(ctx context.Context, networkID int64, ignore *Ignore) error {
+	ctx, cancel := context.WithTimeout(ctx, postgresQueryTimeout)
+	defer cancel()
+
+	return db.db.QueryRowContext(ctx,
+		`INSERT INTO "Ignore" (network, mask) VALUES ($1, $2) RETURNING id, created_at`,
+		networkID, ignore.Mask).Scan(&ignore.ID, &ignore.CreatedAt)
+}
+
+func (db *PostgresDB) DeleteIgnore(ctx context.Context, id int64) error {
+	ctx, cancel := context.WithTimeout(ctx, postgresQueryTimeout)
+	defer cancel()
+
+	_, err := db.db.ExecContext(ctx, `DELETE FROM "Ignore" WHERE id = $1`, id)
+	return err
+}
+
 func (db *PostgresDB) GetDeviceCertificate(ctx context.Context, fingerprint []byte) (int64, *DeviceCertificate, error) {
 	ctx, cancel := context.WithTimeout(ctx, postgresQueryTimeout)
 	defer cancel()

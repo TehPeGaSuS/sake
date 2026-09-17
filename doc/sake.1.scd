@@ -522,6 +522,37 @@ character.
 *channel delete* <name>
 	Leave and forget a channel.
 
+*ignore list* [-network name]
+	(sake) Show hostmasks currently ignored on a network.
+
+	Options are:
+
+	*-network* <name>
+		Select a network. By default, the current network is selected, if any.
+
+*ignore add* [-network name] <mask>
+	(sake) Ignore messages from a hostmask on a network: they are still
+	recorded in history, but never relayed live to any downstream client.
+
+	_mask_ is a case-insensitive glob pattern matched against
+	_nick!user@host_ (wildcards \* and ? are supported), e.g.
+	\*!\*@spammer.example.com. A bare nick with no "!" or "@" is expanded to
+	<nick>\!\*@\*.
+
+	Options are:
+
+	*-network* <name>
+		Select a network. By default, the current network is selected, if any.
+
+*ignore delete* [-network name] <mask>
+	(sake) Remove a previously ignored hostmask. _mask_ must match exactly as
+	shown by _ignore list_.
+
+	Options are:
+
+	*-network* <name>
+		Select a network. By default, the current network is selected, if any.
+
 *device-certificate status*
 	Show a list of saved device certificates.
 

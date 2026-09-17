@@ -57,6 +57,19 @@ CREATE TABLE "Channel" (
 
 CREATE INDEX "Channel_network_index" ON "Channel" (network);
 
+-- sake: bouncer-level per-network ignore list. Messages from a sender whose
+-- nick!user@host matches one of these masks are still logged, but not
+-- relayed live to any attached downstream client.
+CREATE TABLE "Ignore" (
+	id SERIAL PRIMARY KEY,
+	network INTEGER NOT NULL REFERENCES "Network"(id) ON DELETE CASCADE,
+	mask VARCHAR(255) NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+	UNIQUE(network, mask)
+);
+
+CREATE INDEX "Ignore_network_index" ON "Ignore" (network);
+
 CREATE TABLE "DeviceCertificate" (
 	id SERIAL PRIMARY KEY,
 	"user" INTEGER NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,

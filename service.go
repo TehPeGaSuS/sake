@@ -356,6 +356,25 @@ func init() {
 				},
 			},
 		},
+		"ignore": {
+			children: serviceCommandSet{
+				"list": {
+					usage:  "[-network name]",
+					desc:   "show ignored hostmasks for a network",
+					handle: handleServiceIgnoreList,
+				},
+				"add": {
+					usage:  "[-network name] <mask>",
+					desc:   "(sake) ignore messages from a hostmask (nick!user@host, glob wildcards * and ? allowed, or a bare nick) - still logged, just not relayed live to any client",
+					handle: handleServiceIgnoreAdd,
+				},
+				"delete": {
+					usage:  "[-network name] <mask>",
+					desc:   "(sake) remove a previously ignored hostmask",
+					handle: handleServiceIgnoreDelete,
+				},
+			},
+		},
 		"device-certificate": {
 			children: serviceCommandSet{
 				"status": {
@@ -1857,6 +1876,111 @@ func handleServiceDeviceCertificateDelete(ctx *serviceContext, params []string) 
 		return fmt.Errorf("could not delete device certificate: %v", err)
 	}
 	ctx.print(fmt.Sprintf("deleted device certificate %q", fingerprint))
+	return nil
+}
+
+func handleServiceIgnoreList(ctx *serviceContext, params []string) error {
+	fs := newFlagSet()
+	netName := fs.String("network", "", "select a network")
+
+	if err := fs.Parse(params); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected argument: %v", fs.Arg(0))
+	}
+
+	net, err := getNetworkFromFlag(ctx, *netName)
+	if err != nil {
+		return err
+	}
+
+	ignores := net.ignoresSnapshot()
+	if len(ignores) == 0 {
+		ctx.print("No ignored hostmasks.")
+		return nil
+	}
+	for _, ig := range ignores {
+		ctx.print(fmt.Sprintf("%v (added %v)", ig.Mask, ig.CreatedAt.Format(time.DateTime)))
+	}
+	return nil
+}
+
+func handleServiceIgnoreAdd(ctx *serviceContext, params []string) error {
+	fs := newFlagSet()
+	netName := fs.String("network", "", "select a network")
+
+	if err := fs.Parse(params); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("expected exactly one argument")
+	}
+	mask := fs.Arg(0)
+	if !strings.ContainsAny(mask, "!@") {
+		// Bare nick shorthand, e.g. "ignore add spammer".
+		mask += "!*@*"
+	}
+
+	net, err := getNetworkFromFlag(ctx, *netName)
+	if err != nil {
+		return err
+	}
+
+	for _, ig := range net.ignoresSnapshot() {
+		if strings.EqualFold(ig.Mask, mask) {
+			return fmt.Errorf("%q is already ignored", mask)
+		}
+	}
+
+	ignore := &database.Ignore{Mask: mask}
+	if err := ctx.srv.db.StoreIgnore(ctx, net.ID, ignore); err != nil {
+		return fmt.Errorf("could not add ignore: %v", err)
+	}
+	net.setIgnores(append(net.ignoresSnapshot(), *ignore))
+
+	ctx.print(fmt.Sprintf("now ignoring %q", mask))
+	return nil
+}
+
+func handleServiceIgnoreDelete(ctx *serviceContext, params []string) error {
+	fs := newFlagSet()
+	netName := fs.String("network", "", "select a network")
+
+	if err := fs.Parse(params); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("expected exactly one argument")
+	}
+	mask := fs.Arg(0)
+
+	net, err := getNetworkFromFlag(ctx, *netName)
+	if err != nil {
+		return err
+	}
+
+	ignores := net.ignoresSnapshot()
+	var found *database.Ignore
+	remaining := ignores[:0:0]
+	for _, ig := range ignores {
+		if found == nil && strings.EqualFold(ig.Mask, mask) {
+			ig := ig
+			found = &ig
+			continue
+		}
+		remaining = append(remaining, ig)
+	}
+	if found == nil {
+		return fmt.Errorf("no ignore entry found for %q", mask)
+	}
+
+	if err := ctx.srv.db.DeleteIgnore(ctx, found.ID); err != nil {
+		return fmt.Errorf("could not delete ignore: %v", err)
+	}
+	net.setIgnores(remaining)
+
+	ctx.print(fmt.Sprintf("no longer ignoring %q", mask))
 	return nil
 }
 

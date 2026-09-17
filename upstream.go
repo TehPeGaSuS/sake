@@ -2350,13 +2350,15 @@ func (uc *upstreamConn) produce(ctx context.Context, target string, msg *irc.Mes
 	ch := uc.network.channels.Get(target)
 	detached := ch != nil && ch.Detached
 	blocked, _ := ctx.Value(contextSourceBlockedKey).(bool)
+	// sake: ignored senders are still logged (above) but never relayed live
+	ignored := uc.network.isIgnored(msg.Prefix)
 
 	uc.forEachDownstream(func(dc *downstreamConn) {
 		if blocked && !dc.metadataSubs["soju.im/blocked"] {
 			return
 		}
 		echo := dc.id == originID && msg.Prefix != nil && uc.isOurNick(msg.Prefix.Name)
-		if !detached && (!echo || dc.caps.IsEnabled("echo-message")) {
+		if !detached && !ignored && (!echo || dc.caps.IsEnabled("echo-message")) {
 			dc.sendMessageWithID(ctx, msg, msgID)
 		} else {
 			dc.advanceMessageWithID(ctx, msg, msgID)

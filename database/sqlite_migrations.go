@@ -253,4 +253,16 @@ var sqliteMigrations = []string{
 		ALTER TABLE User ADD COLUMN sasl_external_cert BLOB;
 		ALTER TABLE User ADD COLUMN sasl_external_key BLOB;
 	`,
+	// sake: bouncer-level per-network ignore list
+	`
+		CREATE TABLE Ignore (
+			id INTEGER PRIMARY KEY,
+			network INTEGER NOT NULL,
+			mask TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(network) REFERENCES Network(id),
+			UNIQUE(network, mask)
+		);
+		CREATE INDEX Ignore_network_index ON Ignore(network);
+	`,
 }

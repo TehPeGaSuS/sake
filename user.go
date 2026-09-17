@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -161,9 +162,13 @@ type network struct {
 
 	pushTargetsMutex sync.Mutex
 	pushTargets      xirc.CaseMappingMap[time.Time]
+
+	// sake: bouncer-level per-network ignore list (see database.Ignore)
+	ignoresMutex sync.Mutex
+	ignores      []database.Ignore
 }
 
-func newNetwork(user *user, record *database.Network, channels []database.Channel) *network {
+func newNetwork(user *user, record *database.Network, channels []database.Channel, ignores []database.Ignore) *network {
 	logger := &prefixLogger{user.logger, fmt.Sprintf("network %q: ", record.GetName())}
 
 	// Initialize maps with the most strict case-mapping to avoid collisions:
@@ -185,7 +190,40 @@ func newNetwork(user *user, record *database.Network, channels []database.Channe
 		delivered:   newDeliveredStore(cm),
 		pushTargets: xirc.NewCaseMappingMap[time.Time](cm),
 		casemap:     stdCaseMapping,
+		ignores:     ignores,
 	}
+}
+
+// isIgnored reports whether prefix's nick!user@host matches one of this
+// network's ignore masks. Matching is case-insensitive glob (* and ?).
+func (net *network) isIgnored(prefix *irc.Prefix) bool {
+	if prefix == nil {
+		return false
+	}
+	mask := strings.ToLower(prefix.String())
+
+	net.ignoresMutex.Lock()
+	defer net.ignoresMutex.Unlock()
+	for _, ig := range net.ignores {
+		if ok, _ := path.Match(strings.ToLower(ig.Mask), mask); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// setIgnores replaces the in-memory ignore list, used after a service
+// command adds or removes an entry.
+func (net *network) setIgnores(ignores []database.Ignore) {
+	net.ignoresMutex.Lock()
+	defer net.ignoresMutex.Unlock()
+	net.ignores = ignores
+}
+
+func (net *network) ignoresSnapshot() []database.Ignore {
+	net.ignoresMutex.Lock()
+	defer net.ignoresMutex.Unlock()
+	return append([]database.Ignore(nil), net.ignores...)
 }
 
 func (net *network) forEachDownstream(f func(*downstreamConn)) {
@@ -677,8 +715,13 @@ func (u *user) run() {
 			u.logger.Printf("failed to list channels for user %q, network %q: %v", u.Username, record.GetName(), err)
 			continue
 		}
+		ignores, err := u.srv.db.ListIgnores(ctx, record.ID)
+		if err != nil {
+			u.logger.Printf("failed to list ignores for user %q, network %q: %v", u.Username, record.GetName(), err)
+			continue
+		}
 
-		network := newNetwork(u, &record, channels)
+		network := newNetwork(u, &record, channels, ignores)
 		u.networks = append(u.networks, network)
 
 		if u.hasPersistentMsgStore() {
@@ -1121,7 +1164,7 @@ func (u *user) createNetwork(ctx context.Context, record *database.Network, enfo
 		return nil, err
 	}
 
-	network := newNetwork(u, record, nil)
+	network := newNetwork(u, record, nil, nil)
 	err := u.srv.db.StoreNetwork(ctx, u.ID, &network.Network)
 	if err != nil {
 		return nil, err
@@ -1175,7 +1218,7 @@ func (u *user) updateNetwork(ctx context.Context, record *database.Network, enfo
 		channels = append(channels, *ch)
 	})
 
-	updatedNetwork := newNetwork(u, record, channels)
+	updatedNetwork := newNetwork(u, record, channels, network.ignoresSnapshot())
 
 	// If we're currently connected, disconnect and perform the necessary
 	// bookkeeping

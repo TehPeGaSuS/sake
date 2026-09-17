@@ -41,6 +41,11 @@ panel, differences from soju, and the full `sake(1)`/`sakectl(1)` reference.
 - Removed the `UNIQUE(user, addr, nick)` constraint — allows connecting to the
   same address with the same nick under different network names (bouncer
   chaining).
+- **Bouncer-level per-network ignore list** (`ignore add/list/delete
+  [-network name] <mask>`) — messages from a matching hostmask are still
+  recorded in history, but never relayed live to any connected client. Applies
+  once at the bouncer regardless of how many clients are attached, unlike a
+  per-client ignore list.
 - **Self-service web admin panel** (see below), in the spirit of ZNC's
   webadmin module — a web UI for account/network/channel management that
   soju itself only exposes through the `BouncerServ` IRC service, including

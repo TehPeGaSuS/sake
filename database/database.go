@@ -50,6 +50,10 @@ type Database interface {
 	StoreChannel(ctx context.Context, networKID int64, ch *Channel) error
 	DeleteChannel(ctx context.Context, id int64) error
 
+	ListIgnores(ctx context.Context, networkID int64) ([]Ignore, error)
+	StoreIgnore(ctx context.Context, networkID int64, ignore *Ignore) error
+	DeleteIgnore(ctx context.Context, id int64) error
+
 	GetDeviceCertificate(ctx context.Context, fingerprint []byte) (int64, *DeviceCertificate, error)
 	ListDeviceCertificates(ctx context.Context, userID int64) ([]DeviceCertificate, error)
 	StoreDeviceCertificate(ctx context.Context, userID int64, cert *DeviceCertificate) error
@@ -286,6 +290,16 @@ type Channel struct {
 	ReattachOn    MessageFilter
 	DetachAfter   time.Duration
 	DetachOn      MessageFilter
+}
+
+// Ignore is a bouncer-level, per-network ignore entry: messages whose
+// sender's nick!user@host matches Mask (a case-insensitive glob, e.g.
+// "*!*@spammer.example.com") are still recorded in history but are not
+// relayed live to any downstream client.
+type Ignore struct {
+	ID        int64
+	Mask      string
+	CreatedAt time.Time
 }
 
 type DeviceCertificate struct {
