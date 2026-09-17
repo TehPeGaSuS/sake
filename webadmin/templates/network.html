@@ -26,12 +26,12 @@
     <div><label>SASL PLAIN password</label><input type="password" name="sasl_password" value="{{.Network.SASL.Plain.Password}}" placeholder="(unchanged)"></div>
   </div>
 
-  <label>Server certificate fingerprint <span class="muted">(pins the upstream server's TLS cert; SHA-256 or SHA-512 hex, colons OK)</span></label>
+  <label>Pinned server TLS certificate <span class="muted">(not for login: this only pins the upstream <em>server's</em> certificate instead of checking it against CAs, for self-signed servers. SHA-256 or SHA-512 hex, colons OK)</span></label>
   <input type="text" name="certfp" value="{{certFPHex .Network.CertFP}}" placeholder="e.g. AA:BB:CC:... or leave blank">
 
-  <label>Client certificate for SASL EXTERNAL <span class="muted">(paste a PEM file with both the certificate and the private key, like ZNC's user.pem)</span></label>
+  <label>Client certificate for SASL EXTERNAL <span class="muted">(identifies you to the network/services; paste a PEM file with both the certificate and the private key, like ZNC's user.pem)</span></label>
   {{if .ClientCertSHA256}}
-  <p class="muted">Certificate set. SHA-256: <code>{{.ClientCertSHA256}}</code><br>SHA-512: <code>{{.ClientCertSHA512}}</code></p>
+  <p class="muted">Certificate set. Register this with services via <code>/msg NickServ CERT ADD {{.ClientCertSHA512}}</code> (fingerprint algorithm depends on the network - some use SHA-256: <code>{{.ClientCertSHA256}}</code>).</p>
   <label><input type="checkbox" name="remove_client_cert"> Remove this certificate (falls back to SASL PLAIN or no SASL)</label>
   {{end}}
   <textarea name="client_cert_pem" rows="6" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----&#10;-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
