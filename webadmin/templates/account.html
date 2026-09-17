@@ -25,5 +25,27 @@
   {{end}}
   <div class="actions"><button type="submit">Save</button></div>
 </form>
+
+<h2>Active sessions</h2>
+<table>
+<tr><th>Client</th><th>Network</th><th>Nick</th><th>Address</th><th>Connected for</th><th></th></tr>
+{{range .Sessions}}
+<tr>
+  <td>{{if .ClientName}}{{.ClientName}}{{else}}<span class="muted">(none)</span>{{end}}</td>
+  <td>{{if .Network}}{{.Network}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
+  <td>{{.Nick}}</td>
+  <td>{{.RemoteAddr}}</td>
+  <td>{{connectedFor .ConnectedAt}}</td>
+  <td>
+    <form method="post" action="/admin/sessions/{{.ID}}/disconnect" onsubmit="return confirm('Disconnect this session?');">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <button type="submit" class="danger">Disconnect</button>
+    </form>
+  </td>
+</tr>
+{{else}}
+<tr><td colspan="6" class="muted">No active sessions (or session tracking is unavailable).</td></tr>
+{{end}}
+</table>
 {{end}}
 {{template "layout" .}}

@@ -30,6 +30,10 @@ var templateFuncs = template.FuncMap{
 		}
 		return certFP
 	},
+	// connectedFor formats how long ago a session connected, e.g. "3h12m".
+	"connectedFor": func(t time.Time) string {
+		return time.Since(t).Round(time.Second).String()
+	},
 }
 
 func init() {
@@ -130,6 +134,16 @@ func (h *Handler) renderAccount(w http.ResponseWriter, r *http.Request, actor *d
 		extra["DefaultCertSHA256"] = sha256hex
 		extra["DefaultCertSHA512"] = sha512hex
 	}
+	if h.Srv != nil {
+		sessions, err := h.Srv.ListSessions(r.Context(), actor.Username)
+		if err != nil {
+			if errMsg == "" {
+				errMsg = "failed to list active sessions: " + err.Error()
+			}
+		} else {
+			extra["Sessions"] = sessions
+		}
+	}
 	h.render(w, r, "account.html", "My account", actor, errMsg, extra)
 }
 
@@ -168,6 +182,35 @@ func (h *Handler) handleAccountSave(w http.ResponseWriter, r *http.Request, acto
 		return
 	}
 	http.Redirect(w, r, "/admin/account", http.StatusFound)
+}
+
+func (h *Handler) handleSessionDisconnect(w http.ResponseWriter, r *http.Request, actor *database.User) {
+	target, err := h.targetForRequest(r, actor)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+	if h.Srv == nil {
+		http.Error(w, "session management is not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	id, err := strconv.ParseUint(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	if err := h.Srv.DisconnectSession(r.Context(), target.Username, id); err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	redirect := "/admin/account"
+	if target.Username != actor.Username {
+		redirect += "?username=" + target.Username
+	}
+	http.Redirect(w, r, redirect, http.StatusFound)
 }
 
 // --- networks (self-service; admins may edit other users' via ?username=) ---

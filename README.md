@@ -143,8 +143,10 @@ Pages:
 - `/admin/networks/{id}/channels/{id}` — add/edit/delete a channel: join key,
   detached state, and the relay-while-detached / reattach-on / auto-detach-on
   message filters plus auto-detach-after timeout
-- `/admin/account` — change your own nick, realname, password, and your
-  account-wide default SASL EXTERNAL certificate
+- `/admin/account` — change your own nick, realname, password, your
+  account-wide default SASL EXTERNAL certificate, and view/disconnect your
+  currently connected clients (live session list: client name, network,
+  nick, address, connected-for)
 - `/admin/users` — **admin-only**: list, create, edit and delete any user
 
 Security notes:

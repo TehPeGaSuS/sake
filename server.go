@@ -435,6 +435,66 @@ func (s *Server) getUser(name string) *user {
 	return u
 }
 
+// Session is a snapshot of one of a user's currently connected downstream
+// (client) connections, for display/management in the web admin panel or
+// the IRC service.
+type Session struct {
+	ID          uint64
+	Network     string // empty if not bound to a specific network
+	ClientName  string
+	Nick        string
+	RemoteAddr  string
+	ConnectedAt time.Time
+}
+
+// ListSessions returns a snapshot of username's currently connected
+// downstream clients. It returns (nil, nil) if the user isn't currently
+// running (e.g. disabled, or hasn't connected since the bouncer started).
+// Safe to call from any goroutine.
+func (s *Server) ListSessions(ctx context.Context, username string) ([]Session, error) {
+	u := s.getUser(username)
+	if u == nil {
+		return nil, nil
+	}
+
+	done := make(chan []Session, 1)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case u.events <- eventListSessions{done: done}:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case sessions := <-done:
+		return sessions, nil
+	}
+}
+
+// DisconnectSession closes username's downstream connection identified by
+// id (see Session.ID). Safe to call from any goroutine.
+func (s *Server) DisconnectSession(ctx context.Context, username string, id uint64) error {
+	u := s.getUser(username)
+	if u == nil {
+		return fmt.Errorf("user %q is not connected", username)
+	}
+
+	done := make(chan error, 1)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case u.events <- eventDisconnectSession{id: id, done: done}:
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		return err
+	}
+}
+
 func (s *Server) addUserLocked(user *database.User) *user {
 	s.Logger.Printf("starting bouncer for user %q", user.Username)
 	u := newUser(s, user)

@@ -374,6 +374,9 @@ type downstreamConn struct {
 
 	id uint64
 
+	// sake: when this connection was accepted, for session listing
+	connectedAt time.Time
+
 	// These don't change after connection registration
 	registered    bool
 	user          *user
@@ -411,6 +414,7 @@ func newDownstreamConn(srv *Server, ic ircConn, id uint64) *downstreamConn {
 	dc := &downstreamConn{
 		conn:         newConn(srv, ic, &options),
 		id:           id,
+		connectedAt:  time.Now(),
 		nick:         "*",
 		nickCM:       "*",
 		username:     "~u",

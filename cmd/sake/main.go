@@ -216,7 +216,7 @@ func main() {
 	if configPath != "" {
 		webadminSecretPath = filepath.Join(filepath.Dir(configPath), "webadmin-secret")
 	}
-	webadminHandler := webadmin.New(db, srv.Config().Auth, webadminSecretPath)
+	webadminHandler := webadmin.New(db, srv.Config().Auth, webadminSecretPath, srv)
 
 	httpMux := http.NewServeMux()
 	httpMux.Handle("/socket", srv)

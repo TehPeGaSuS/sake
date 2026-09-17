@@ -89,6 +89,16 @@ type eventTryRegainNick struct {
 	nick string
 }
 
+// sake: session listing/management for the web admin panel and IRC service
+type eventListSessions struct {
+	done chan []Session
+}
+
+type eventDisconnectSession struct {
+	id   uint64
+	done chan error
+}
+
 type eventUserRun struct {
 	params []string
 	ch     chan userRunMsg
@@ -943,6 +953,46 @@ func (u *user) run() {
 			}
 		case eventTryRegainNick:
 			e.uc.tryRegainNick(ctx, e.nick)
+		case eventListSessions:
+			sessions := make([]Session, 0, len(u.downstreamConns))
+			for _, dc := range u.downstreamConns {
+				if !dc.registered {
+					continue
+				}
+				netName := ""
+				if dc.network != nil {
+					netName = dc.network.GetName()
+				}
+				sessions = append(sessions, Session{
+					ID:          dc.id,
+					Network:     netName,
+					ClientName:  dc.clientName,
+					Nick:        dc.nick,
+					RemoteAddr:  dc.RemoteAddr().String(),
+					ConnectedAt: dc.connectedAt,
+				})
+			}
+			select {
+			case <-ctx.Done():
+			case e.done <- sessions:
+			}
+		case eventDisconnectSession:
+			var err error
+			found := false
+			for _, dc := range u.downstreamConns {
+				if dc.id == e.id {
+					dc.Close()
+					found = true
+					break
+				}
+			}
+			if !found {
+				err = fmt.Errorf("session not found")
+			}
+			select {
+			case <-ctx.Done():
+			case e.done <- err:
+			}
 		case eventUserRun:
 			err := handleServiceCommand(&serviceContext{
 				Context: ctx,

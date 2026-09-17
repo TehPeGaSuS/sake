@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	sake "github.com/TehPeGaSuS/sake"
 	"github.com/TehPeGaSuS/sake/auth"
 	"github.com/TehPeGaSuS/sake/database"
 )
@@ -26,13 +27,16 @@ import (
 const sessionCookieName = "sake_admin_session"
 const sessionTTL = 24 * time.Hour
 
-// Handler serves the self-service web admin panel. It is a pure consumer of
-// database.Database and auth.Authenticator: it does not reach into the
-// running Server/user state, so it can be mounted on any existing HTTP
-// listener (e.g. alongside /socket, /uploads) without touching soju's core.
+// Handler serves the self-service web admin panel. It is mostly a pure
+// consumer of database.Database and auth.Authenticator - it does not reach
+// into the running Server/user state for account/network/channel
+// management - except for the live session list/disconnect feature, which
+// by nature needs to query the running Server for currently connected
+// downstream clients.
 type Handler struct {
 	DB   database.Database
 	Auth *auth.Authenticator
+	Srv  *sake.Server // used for live session listing/disconnect only
 
 	secret []byte // HMAC key for session/CSRF signing, persisted across restarts
 	mux    *http.ServeMux
@@ -45,13 +49,13 @@ type Handler struct {
 // first use and reused afterwards so restarts don't invalidate every open
 // session. If secretPath is empty, a key is generated in memory and
 // sessions won't survive a restart.
-func New(db database.Database, authr *auth.Authenticator, secretPath string) *Handler {
+func New(db database.Database, authr *auth.Authenticator, secretPath string, srv *sake.Server) *Handler {
 	secret, err := loadOrCreateSecret(secretPath)
 	if err != nil {
 		panic("webadmin: failed to load or create session secret: " + err.Error())
 	}
 
-	h := &Handler{DB: db, Auth: authr, secret: secret, limiter: newLoginLimiter()}
+	h := &Handler{DB: db, Auth: authr, Srv: srv, secret: secret, limiter: newLoginLimiter()}
 	h.mux = http.NewServeMux()
 	h.routes()
 	return h
@@ -97,6 +101,7 @@ func (h *Handler) routes() {
 
 	h.mux.HandleFunc("GET /admin/account", h.requireLogin(h.handleAccountForm))
 	h.mux.HandleFunc("POST /admin/account", h.requireLogin(h.handleAccountSave))
+	h.mux.HandleFunc("POST /admin/sessions/{id}/disconnect", h.requireLogin(h.handleSessionDisconnect))
 
 	h.mux.HandleFunc("GET /admin/networks/new", h.requireLogin(h.handleNetworkForm))
 	h.mux.HandleFunc("GET /admin/networks/{id}", h.requireLogin(h.handleNetworkForm))
