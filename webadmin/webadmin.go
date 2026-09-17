@@ -103,6 +103,11 @@ func (h *Handler) routes() {
 	h.mux.HandleFunc("POST /admin/networks/{id}", h.requireLogin(h.handleNetworkSave))
 	h.mux.HandleFunc("POST /admin/networks/{id}/delete", h.requireLogin(h.handleNetworkDelete))
 
+	h.mux.HandleFunc("GET /admin/networks/{netID}/channels/new", h.requireLogin(h.handleChannelForm))
+	h.mux.HandleFunc("GET /admin/networks/{netID}/channels/{id}", h.requireLogin(h.handleChannelForm))
+	h.mux.HandleFunc("POST /admin/networks/{netID}/channels/{id}", h.requireLogin(h.handleChannelSave))
+	h.mux.HandleFunc("POST /admin/networks/{netID}/channels/{id}/delete", h.requireLogin(h.handleChannelDelete))
+
 	h.mux.HandleFunc("GET /admin/users", h.requireAdmin(h.handleUserList))
 	h.mux.HandleFunc("GET /admin/users/new", h.requireAdmin(h.handleUserForm))
 	h.mux.HandleFunc("GET /admin/users/{username}", h.requireAdmin(h.handleUserForm))
@@ -254,6 +259,19 @@ func authorize(actor *database.User, targetUsername string) error {
 		return nil
 	}
 	return errors.New("forbidden: you may only manage your own account")
+}
+
+// errNotFound is a sentinel used by resolver helpers (e.g.
+// resolveNetworkForChannels) to distinguish "doesn't exist" from
+// authorize's "forbidden" error; see writeResolveError.
+var errNotFound = errors.New("not found")
+
+func writeResolveError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, errNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusForbidden)
 }
 
 // checkPassword delegates to the configured auth driver (internal DB, PAM,

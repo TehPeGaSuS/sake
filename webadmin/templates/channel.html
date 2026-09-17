@@ -1,0 +1,56 @@
+{{define "body"}}
+<h1>{{if .Channel.ID}}Edit channel: {{.Channel.Name}}{{else}}Add channel{{end}}</h1>
+<form method="post" action="/admin/networks/{{.NetworkID}}/channels/{{if .Channel.ID}}{{.Channel.ID}}{{else}}new{{end}}">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{if .TargetUsername}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
+
+  <label>Channel name</label>
+  <input type="text" name="name" value="{{.Channel.Name}}" {{if .Channel.ID}}disabled{{end}} required placeholder="#example">
+  {{if .Channel.ID}}<input type="hidden" name="name" value="{{.Channel.Name}}">{{end}}
+
+  <label>Key <span class="muted">(channel password, if any)</span></label>
+  <input type="text" name="key" value="{{.Channel.Key}}">
+
+  <label><input type="checkbox" name="detached" {{if .Channel.Detached}}checked{{end}}> Detached <span class="muted">(hidden from clients, but still logged/joined)</span></label>
+
+  <label>Relay while detached</label>
+  <select name="relay_detached">
+    <option value="default" {{if eq .Channel.RelayDetached 0}}selected{{end}}>Account default</option>
+    <option value="none" {{if eq .Channel.RelayDetached 1}}selected{{end}}>None</option>
+    <option value="highlight" {{if eq .Channel.RelayDetached 2}}selected{{end}}>Highlights only</option>
+    <option value="message" {{if eq .Channel.RelayDetached 3}}selected{{end}}>All messages</option>
+  </select>
+
+  <label>Reattach on</label>
+  <select name="reattach_on">
+    <option value="default" {{if eq .Channel.ReattachOn 0}}selected{{end}}>Account default</option>
+    <option value="none" {{if eq .Channel.ReattachOn 1}}selected{{end}}>None</option>
+    <option value="highlight" {{if eq .Channel.ReattachOn 2}}selected{{end}}>Highlights only</option>
+    <option value="message" {{if eq .Channel.ReattachOn 3}}selected{{end}}>Any message</option>
+  </select>
+
+  <label>Auto-detach on</label>
+  <select name="detach_on">
+    <option value="default" {{if eq .Channel.DetachOn 0}}selected{{end}}>Account default</option>
+    <option value="none" {{if eq .Channel.DetachOn 1}}selected{{end}}>None</option>
+    <option value="highlight" {{if eq .Channel.DetachOn 2}}selected{{end}}>Highlights only</option>
+    <option value="message" {{if eq .Channel.DetachOn 3}}selected{{end}}>Any message</option>
+  </select>
+
+  <label>Auto-detach after <span class="muted">(minutes of inactivity, 0 = never)</span></label>
+  <input type="number" name="detach_after_minutes" min="0" value="{{.DetachAfterMinutes}}">
+
+  <div class="actions">
+    <button type="submit">Save</button>
+    {{if .Channel.ID}}<a class="button danger" href="#" onclick="document.getElementById('del').submit(); return false;">Delete</a>{{end}}
+  </div>
+</form>
+{{if .Channel.ID}}
+<form id="del" method="post" action="/admin/networks/{{.NetworkID}}/channels/{{.Channel.ID}}/delete">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{if .TargetUsername}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
+</form>
+{{end}}
+<p><a href="/admin/networks/{{.NetworkID}}{{if .TargetUsername}}?username={{.TargetUsername}}{{end}}">&larr; back to network</a></p>
+{{end}}
+{{template "layout" .}}
