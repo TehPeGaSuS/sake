@@ -1,0 +1,122 @@
+/* Stylesheet for mandoc(1) -T html output, used for sake's GitHub Pages
+   man page mirror. Targets the standard mdoc/man HTML class names. */
+
+:root {
+	--fg: #1a1a1a;
+	--bg: #ffffff;
+	--muted: #666666;
+	--accent: #205;
+	--border: #dddddd;
+	--code-bg: #f5f5f5;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--fg: #e6e6e6;
+		--bg: #14161a;
+		--muted: #9aa0a6;
+		--accent: #8ab4f8;
+		--border: #333844;
+		--code-bg: #1d2026;
+	}
+}
+
+html {
+	background: var(--bg);
+}
+
+body {
+	max-width: 46em;
+	margin: 2em auto;
+	padding: 0 1.2em 3em;
+	font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+		Helvetica, Arial, sans-serif;
+	color: var(--fg);
+	background: var(--bg);
+}
+
+table.head, table.foot {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.85em;
+	color: var(--muted);
+}
+
+table.head {
+	border-bottom: 1px solid var(--border);
+	margin-bottom: 1.5em;
+	padding-bottom: 0.6em;
+}
+
+table.foot {
+	border-top: 1px solid var(--border);
+	margin-top: 3em;
+	padding-top: 0.6em;
+}
+
+.head-ltitle, .head-rtitle, .foot-date, .foot-os {
+	white-space: nowrap;
+}
+
+.head-vol {
+	text-align: center;
+	width: 100%;
+}
+
+h1.Sh {
+	font-size: 1.3em;
+	margin-top: 2em;
+	padding-bottom: 0.2em;
+	border-bottom: 1px solid var(--border);
+}
+
+h1.Sh a.permalink {
+	color: inherit;
+	text-decoration: none;
+}
+
+h1.Sh a.permalink:hover {
+	text-decoration: underline;
+}
+
+p.Pp {
+	margin: 0.9em 0;
+}
+
+.Bd-indent {
+	margin: 0.4em 0 1em 1.4em;
+}
+
+ul.Bl-bullet {
+	margin: 0.4em 0;
+	padding-left: 1.4em;
+}
+
+ul.Bl-bullet > li {
+	margin: 0.3em 0;
+}
+
+b, .Pp > b:first-child {
+	color: var(--accent);
+}
+
+i {
+	font-style: italic;
+}
+
+pre {
+	background: var(--code-bg);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.8em 1em;
+	overflow-x: auto;
+	font-size: 0.9em;
+}
+
+a {
+	color: var(--accent);
+}
+
+section.Sh {
+	scroll-margin-top: 1em;
+}
