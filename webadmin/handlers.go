@@ -2,9 +2,11 @@ package webadmin
 
 import (
 	"embed"
+	"encoding/hex"
 	"html/template"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/TehPeGaSuS/sake/database"
 )
@@ -17,12 +19,23 @@ var templateFS embed.FS
 // together - otherwise the "body" definitions collide and only one survives.
 var pages = map[string]*template.Template{}
 
+var templateFuncs = template.FuncMap{
+	// certFPHex strips the "sha-256:"/"sha-512:" storage prefix so the form
+	// field round-trips as plain hex, matching what a user would paste in.
+	"certFPHex": func(certFP string) string {
+		if i := strings.IndexByte(certFP, ':'); i >= 0 {
+			return certFP[i+1:]
+		}
+		return certFP
+	},
+}
+
 func init() {
 	for _, name := range []string{
 		"login.html", "dashboard.html", "account.html",
 		"network.html", "users.html", "user.html",
 	} {
-		pages[name] = template.Must(template.New("layout").ParseFS(templateFS, "templates/layout.html", "templates/"+name))
+		pages[name] = template.Must(template.New("layout").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/"+name))
 	}
 }
 
@@ -183,10 +196,22 @@ func (h *Handler) handleNetworkForm(w http.ResponseWriter, r *http.Request, acto
 		}
 	}
 
-	h.render(w, r, "network.html", "Network", actor, "", map[string]any{
+	extra := map[string]any{
 		"Network":        net,
 		"TargetUsername": target.Username,
 		"CanSetAdvanced": actor.Admin,
+	}
+	if net.SASL.Mechanism == "EXTERNAL" && len(net.SASL.External.CertBlob) > 0 {
+		sha256hex, sha512hex := certFingerprints(net.SASL.External.CertBlob)
+		extra["ClientCertSHA256"] = sha256hex
+		extra["ClientCertSHA512"] = sha512hex
+	}
+	h.render(w, r, "network.html", "Network", actor, "", extra)
+}
+
+func (h *Handler) renderNetworkError(w http.ResponseWriter, r *http.Request, actor *database.User, net *database.Network, targetUsername, errMsg string) {
+	h.render(w, r, "network.html", "Network", actor, errMsg, map[string]any{
+		"Network": net, "TargetUsername": targetUsername, "CanSetAdvanced": actor.Admin,
 	})
 }
 
@@ -239,15 +264,50 @@ func (h *Handler) handleNetworkSave(w http.ResponseWriter, r *http.Request, acto
 	}
 	net.AutoAway = r.FormValue("auto_away") == "on"
 	net.Enabled = r.FormValue("enabled") == "on"
+
+	if certFP := r.FormValue("certfp"); certFP != "" {
+		normalized := strings.ToLower(strings.ReplaceAll(certFP, ":", ""))
+		if _, err := hex.DecodeString(normalized); err != nil {
+			h.renderNetworkError(w, r, actor, net, target.Username, "server certificate fingerprint must be hex-encoded")
+			return
+		}
+		switch len(normalized) {
+		case 64:
+			net.CertFP = "sha-256:" + normalized
+		case 128:
+			net.CertFP = "sha-512:" + normalized
+		default:
+			h.renderNetworkError(w, r, actor, net, target.Username, "server certificate fingerprint must be a SHA-256 or SHA-512 hash")
+			return
+		}
+	} else {
+		net.CertFP = ""
+	}
+
+	if r.FormValue("remove_client_cert") == "on" {
+		net.SASL.External.CertBlob = nil
+		net.SASL.External.PrivKeyBlob = nil
+		if net.SASL.Mechanism == "EXTERNAL" {
+			net.SASL.Mechanism = ""
+		}
+	} else if clientCertPEM := r.FormValue("client_cert_pem"); clientCertPEM != "" {
+		certDER, keyDER, err := parseClientCertPEM(clientCertPEM)
+		if err != nil {
+			h.renderNetworkError(w, r, actor, net, target.Username, "client certificate: "+err.Error())
+			return
+		}
+		net.SASL.External.CertBlob = certDER
+		net.SASL.External.PrivKeyBlob = keyDER
+		net.SASL.Mechanism = "EXTERNAL"
+	}
+
 	if actor.Admin {
 		net.SourceIP = r.FormValue("source_ip")
 		net.TLSInsecure = r.FormValue("tls_insecure") == "on"
 	}
 
 	if err := h.DB.StoreNetwork(r.Context(), target.ID, net); err != nil {
-		h.render(w, r, "network.html", "Network", actor, err.Error(), map[string]any{
-			"Network": net, "TargetUsername": target.Username, "CanSetAdvanced": actor.Admin,
-		})
+		h.renderNetworkError(w, r, actor, net, target.Username, err.Error())
 		return
 	}
 
