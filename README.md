@@ -9,6 +9,9 @@ per-network source IP binding, `certfp import`/account-wide default
 certificates, self-signed certificate acceptance, relaxed network uniqueness
 constraints for bouncer chaining, and a self-service web admin panel.
 
+**[Wiki](https://github.com/TehPeGaSuS/sake/wiki)** — quickstart, web admin
+panel, differences from soju, and the full `sake(1)`/`sakectl(1)` reference.
+
 ## Table of contents
 
 - [Differences from soju](#differences-from-soju)
@@ -171,6 +174,8 @@ For development: `go run ./cmd/sake`. Tests: `go test ./...`.
 
 ## Documentation
 
+- **[Wiki](https://github.com/TehPeGaSuS/sake/wiki)** — the same reference
+  below, but browsable, plus the web admin panel and quickstart guides
 - [`doc/sake.1.scd`](doc/sake.1.scd) — full CLI/config/IRC-service reference
   (renders to the `sake(1)` man page via `scdoc`)
 - [`doc/sakectl.1.scd`](doc/sakectl.1.scd) — `sakectl(1)` man page
