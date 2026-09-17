@@ -97,7 +97,7 @@ func (s *Identd) handle(c net.Conn) {
 
 	scanner := bufio.NewScanner(c)
 
-	// We only read to read lines with two port numbers
+	// We only need to read lines with two port numbers
 	var buf [512]byte
 	scanner.Buffer(buf[:], len(buf))
 

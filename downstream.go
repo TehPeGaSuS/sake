@@ -249,18 +249,19 @@ const illegalChanChars = " ,\x07"
 // permanentDownstreamCaps is the list of always-supported downstream
 // capabilities.
 var permanentDownstreamCaps = map[string]string{
-	"batch":         "",
-	"cap-notify":    "",
-	"echo-message":  "",
-	"invite-notify": "",
-	"server-time":   "",
-	"setname":       "",
+	"batch":             "",
+	"cap-notify":        "",
+	"echo-message":      "",
+	"invite-notify":     "",
+	"no-implicit-names": "",
+	"server-time":       "",
+	"setname":           "",
 
+	"draft/extended-isupport": "",
 	"draft/metadata-2":        "before-connect,max-keys=0,max-value-bytes=1",
+	"draft/no-implicit-names": "",
 	"draft/pre-away":          "",
 	"draft/read-marker":       "",
-	"draft/no-implicit-names": "",
-	"draft/extended-isupport": "",
 
 	"soju.im/account-required":        "",
 	"soju.im/bouncer-networks":        "",
@@ -4152,7 +4153,7 @@ func forwardChannel(ctx context.Context, dc *downstreamConn, ch *upstreamChannel
 		}
 	}
 
-	if !dc.caps.IsEnabled("soju.im/no-implicit-names") && !dc.caps.IsEnabled("draft/no-implicit-names") {
+	if !dc.caps.IsEnabled("soju.im/no-implicit-names") && !dc.caps.IsEnabled("no-implicit-names") && !dc.caps.IsEnabled("draft/no-implicit-names") {
 		sendNames(ctx, dc, ch)
 	}
 }

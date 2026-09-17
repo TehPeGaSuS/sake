@@ -54,10 +54,11 @@ var permanentUpstreamCaps = map[string]bool{
 // storableMessageTags is the static list of message tags that will cause
 // a TAGMSG to be stored.
 var storableMessageTags = map[string]bool{
+	"+react":   true,
+	"+unreact": true,
+
 	"+draft/react":   true,
-	"+react":         true,
 	"+draft/unreact": true,
-	"+unreact":       true,
 }
 
 type registrationError struct {
@@ -565,8 +566,17 @@ func (uc *upstreamConn) enqueueCommand(ctx context.Context, dc *downstreamConn, 
 
 	// If we didn't get a reply after a while, just give up
 	// TODO: consider sending an abort reply to downstream
-	if t := uc.pendingCmds[msg.Command][0].sentAt; !t.IsZero() && time.Since(t) > 30*time.Second {
-		copy(uc.pendingCmds[msg.Command], uc.pendingCmds[msg.Command][1:])
+	timedOut := 0
+	for timedOut < len(uc.pendingCmds[msg.Command]) {
+		pendingCmd := uc.pendingCmds[msg.Command][timedOut]
+		if pendingCmd.sentAt.IsZero() || time.Since(pendingCmd.sentAt) <= 30*time.Second {
+			break
+		}
+		uc.logger.Printf("timed out waiting for reply to pending command: %v", pendingCmd)
+		timedOut++
+	}
+	if timedOut > 0 {
+		copy(uc.pendingCmds[msg.Command], uc.pendingCmds[msg.Command][timedOut:])
 	}
 
 	if len(uc.pendingCmds[msg.Command]) == 1 {

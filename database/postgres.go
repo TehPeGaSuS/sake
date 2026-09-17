@@ -971,13 +971,16 @@ func (db *PostgresDB) StoreMessages(ctx context.Context, networkID int64, name s
 		switch msg.Command {
 		case "PRIVMSG", "NOTICE":
 			if len(msg.Params) > 1 {
+				s := stripANSI(msg.Params[1])
+				s = strings.ToValidUTF8(s, string(unicode.ReplacementChar))
 				text.Valid = true
-				text.String = stripANSI(msg.Params[1])
+				text.String = s
 			}
 		}
 
 		raw := msg.String()
-		raw = strings.ToValidUTF8(raw, string([]rune{unicode.ReplacementChar}))
+		raw = strings.ToValidUTF8(raw, string(unicode.ReplacementChar))
+
 		err = insertStmt.QueryRowContext(ctx,
 			raw,
 			t,

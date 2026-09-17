@@ -565,9 +565,9 @@ func (fs *networkFlagSet) update(network *database.Network, isAdmin bool) error 
 		if addrParts := strings.SplitN(*fs.Addr, "://", 2); len(addrParts) == 2 {
 			scheme := addrParts[0]
 			switch scheme {
-			case "ircs", "irc+insecure", "unix":
+			case "ircs", "irc+insecure", "irc+unix":
 			default:
-				return fmt.Errorf("unknown scheme %q (supported schemes: ircs, irc+insecure, unix)", scheme)
+				return fmt.Errorf("unknown scheme %q (supported schemes: ircs, irc+insecure, irc+unix)", scheme)
 			}
 		}
 		network.Addr = *fs.Addr
