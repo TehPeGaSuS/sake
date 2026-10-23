@@ -162,7 +162,7 @@ func handleServiceCommand(ctx *serviceContext, words []string) error {
 		} else {
 			logger = ctx.srv.Logger
 		}
-		logger.Printf("command without handler and subcommands invoked:", words[0])
+		logger.Printf("command without handler and subcommands invoked: %v", words[0])
 		return fmt.Errorf("command %q not found", words[0])
 	}
 

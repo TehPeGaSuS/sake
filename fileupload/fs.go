@@ -90,9 +90,11 @@ func (fs *fileuploadFS) store(ctx context.Context, r io.Reader, username, mimeTy
 	defer f.Close()
 
 	if _, err := io.Copy(f, r); err != nil {
+		os.Remove(f.Name())
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
 		return "", fmt.Errorf("failed to close file: %w", err)
 	}
 

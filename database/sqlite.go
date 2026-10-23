@@ -7,14 +7,12 @@ import (
 	"database/sql"
 	sqldriver "database/sql/driver"
 	_ "embed"
-	"errors"
 	"fmt"
 	"math"
 	"strings"
 	"time"
 	"unicode"
 
-	"github.com/mattn/go-sqlite3"
 	"github.com/prometheus/client_golang/prometheus"
 	promcollectors "github.com/prometheus/client_golang/prometheus/collectors"
 	"gopkg.in/irc.v4"
@@ -138,14 +136,6 @@ func (db *SqliteDB) upgrade() error {
 	}
 
 	return tx.Commit()
-}
-
-func (db *SqliteDB) isErrUnique(err error) bool {
-	var sqliteErr *sqlite3.Error
-	if !errors.As(err, &sqliteErr) {
-		return false
-	}
-	return sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique
 }
 
 func (db *SqliteDB) RegisterMetrics(r prometheus.Registerer) error {
@@ -803,7 +793,7 @@ func (db *SqliteDB) StoreDeviceCertificate(ctx context.Context, userID int64, ce
 		}
 		cert.ID, err = res.LastInsertId()
 	}
-	if db.isErrUnique(err) {
+	if isSqliteErrUnique(err) {
 		return ErrDuplicateDeviceCertificate
 	}
 	return err
