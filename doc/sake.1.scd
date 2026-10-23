@@ -395,6 +395,13 @@ character.
 		losing protection against a different or spoofed certificate. Prefer
 		_-certfp_ when possible.
 
+	*-default-cert* true|false
+		(sake) Whether to present the account's default client certificate
+		(see _certfp generate_'s _-default_) to this network when it has no
+		certificate of its own. Disable it to keep this network from seeing
+		the same fingerprint as your other networks. By default, the default
+		certificate is used.
+
 	*-connect-command* <command>
 		Send the specified quoted string as a raw IRC command right after
 		connecting to the server. This can be used to identify to an account
@@ -577,6 +584,14 @@ character.
 	Generate self-signed certificate and use it for authentication (via SASL
 	EXTERNAL).
 
+	(sake) Like ZNC's cert module, the certificate is presented on every TLS
+	connection to the network, whatever the SASL mechanism, so services that
+	log you in by fingerprint (CertFP) and oper blocks matching a fingerprint
+	work too. A network uses its own certificate if it has one, otherwise the
+	account's default certificate (unless disabled for that network with
+	_network update -default-cert false_). Generating a certificate for a network selects SASL
+	EXTERNAL only if no SASL mechanism was configured.
+
 	Generates a 3072-bit RSA private key by default.
 
 	Note, reconnection to the upstream network is required to use the newly
@@ -590,9 +605,9 @@ character.
 
 	*-default*
 		(sake) Set this as the calling user's account-wide default
-		certificate, instead of a per-network one. Any network that enables
-		SASL EXTERNAL (see _sasl set-external_) without a certificate of its
-		own falls back to this default. Mutually exclusive with _-network_.
+		certificate, instead of a per-network one, like a ZNC user-level
+		_user.pem_. Every network without a certificate of its own uses it.
+		Mutually exclusive with _-network_.
 
 	*-key-type* <type>
 		Private key algorithm to use. Valid values are: _rsa_, _ecdsa_ and
@@ -601,15 +616,16 @@ character.
 	*-bits* <bits>
 		Size of RSA key to generate. Ignored for other key types.
 
-*certfp import* [-network name | -default] <path-or-https-url>
+*certfp import* [-network name | -default] <https-url-or-path>
 	(sake) Import an existing certificate and private key (PEM, concatenated
 	in a single file - the same format as ZNC's _user.pem_, e.g. produced by
 	_openssl req -nodes -newkey rsa:4096 -keyout cert.pem -x509 -out cert.pem_)
-	instead of generating a new one, and use it for SASL EXTERNAL
-	authentication.
+	instead of generating a new one. It's used like a generated one (see
+	_certfp generate_).
 
-	The argument is either a local file path readable by the sake process, or
-	an _https://_ URL.
+	The argument is an _https://_ URL, or for admins only, a local file path
+	readable by the sake process. The web admin panel also accepts the PEM
+	text directly.
 
 	Options are:
 
@@ -620,6 +636,12 @@ character.
 	*-default*
 		Set this as the calling user's account-wide default certificate
 		instead of a per-network one. See _certfp generate_'s _-default_.
+
+*certfp remove* [-network name | -default]
+	(sake) Remove a network's own certificate, so it falls back to the
+	account's default certificate (if enabled for it), or remove the account's
+	default certificate. If SASL EXTERNAL is selected and no certificate is
+	left for a network, SASL is disabled for it.
 
 *certfp fingerprint* [options...]
 	Show SHA-1, SHA-256 and SHA-512 fingerprints for the certificate
@@ -655,9 +677,8 @@ character.
 		Select a network. By default, the current network is selected, if any.
 
 *sasl set-external* [options...]
-	(sake) Enable SASL EXTERNAL authentication, using either the network's own
-	certificate (see _certfp generate_/_certfp import_) or the account's
-	default certificate if the network has none of its own.
+	(sake) Enable SASL EXTERNAL authentication, using the certificate the
+	network presents (see _certfp generate_).
 
 	Note, reconnection to the upstream network is required to apply the new
 	settings.
@@ -669,6 +690,9 @@ character.
 
 *sasl reset* [options...]
 	Disable SASL authentication and remove stored credentials.
+
+	(sake) The client certificate is kept, since it's also presented without
+	SASL; use _certfp remove_ to delete it.
 
 	Note, reconnection to the upstream network is required to apply the new
 	settings.

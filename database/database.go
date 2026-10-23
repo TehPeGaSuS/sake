@@ -204,6 +204,7 @@ type Network struct {
 	Enabled         bool
 	SourceIP        string // per-network bind address, overrides user-level SourceIP
 	TLSInsecure     bool   // skip TLS certificate verification for this network
+	NoDefaultCert   bool   // sake: don't fall back to the user's default client certificate
 }
 
 func NewNetwork(addr string) *Network {

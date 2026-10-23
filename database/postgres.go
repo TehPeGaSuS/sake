@@ -329,7 +329,7 @@ func (db *PostgresDB) ListNetworks(ctx context.Context, userID int64) ([]Network
 	rows, err := db.db.QueryContext(ctx, `
 		SELECT id, name, addr, nick, username, realname, certfp, pass, connect_commands, sasl_mechanism,
 			sasl_plain_username, sasl_plain_password, sasl_external_cert, sasl_external_key, auto_away, enabled,
-			source_ip, tls_insecure
+			source_ip, tls_insecure, no_default_cert
 		FROM "Network"
 		WHERE "user" = $1`, userID)
 	if err != nil {
@@ -346,7 +346,7 @@ func (db *PostgresDB) ListNetworks(ctx context.Context, userID int64) ([]Network
 		err := rows.Scan(&net.ID, &name, &net.Addr, &nick, &username, &realname, &certfp,
 			&pass, &connectCommands, &saslMechanism, &saslPlainUsername, &saslPlainPassword,
 			&net.SASL.External.CertBlob, &net.SASL.External.PrivKeyBlob, &net.AutoAway, &net.Enabled,
-			&sourceIP, &net.TLSInsecure)
+			&sourceIP, &net.TLSInsecure, &net.NoDefaultCert)
 		if err != nil {
 			return nil, err
 		}
@@ -391,8 +391,8 @@ func (db *PostgresDB) StoreNetwork(ctx context.Context, userID int64, network *N
 		case "PLAIN":
 			saslPlainUsername = toNullString(network.SASL.Plain.Username)
 			saslPlainPassword = toNullString(network.SASL.Plain.Password)
-			network.SASL.External.CertBlob = nil
-			network.SASL.External.PrivKeyBlob = nil
+			// sake: keep the client certificate, it's also used for CertFP
+			// without SASL EXTERNAL
 		case "EXTERNAL":
 			// keep saslPlain* nil
 		default:
@@ -405,25 +405,26 @@ func (db *PostgresDB) StoreNetwork(ctx context.Context, userID int64, network *N
 		err = db.db.QueryRowContext(ctx, `
 			INSERT INTO "Network" ("user", name, addr, nick, username, realname, certfp, pass, connect_commands,
 				sasl_mechanism, sasl_plain_username, sasl_plain_password, sasl_external_cert,
-				sasl_external_key, auto_away, enabled, source_ip, tls_insecure)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+				sasl_external_key, auto_away, enabled, source_ip, tls_insecure, no_default_cert)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 			RETURNING id`,
 			userID, netName, network.Addr, nick, netUsername, realname, certfp, pass, connectCommands,
 			saslMechanism, saslPlainUsername, saslPlainPassword, network.SASL.External.CertBlob,
 			network.SASL.External.PrivKeyBlob, network.AutoAway, network.Enabled,
-			toNullString(network.SourceIP), network.TLSInsecure).Scan(&network.ID)
+			toNullString(network.SourceIP), network.TLSInsecure, network.NoDefaultCert).Scan(&network.ID)
 	} else {
 		_, err = db.db.ExecContext(ctx, `
 			UPDATE "Network"
 			SET name = $2, addr = $3, nick = $4, username = $5, realname = $6, certfp = $7, pass = $8,
 				connect_commands = $9, sasl_mechanism = $10, sasl_plain_username = $11,
 				sasl_plain_password = $12, sasl_external_cert = $13, sasl_external_key = $14,
-				auto_away = $15, enabled = $16, source_ip = $17, tls_insecure = $18
+				auto_away = $15, enabled = $16, source_ip = $17, tls_insecure = $18,
+				no_default_cert = $19
 			WHERE id = $1`,
 			network.ID, netName, network.Addr, nick, netUsername, realname, certfp, pass, connectCommands,
 			saslMechanism, saslPlainUsername, saslPlainPassword, network.SASL.External.CertBlob,
 			network.SASL.External.PrivKeyBlob, network.AutoAway, network.Enabled,
-			toNullString(network.SourceIP), network.TLSInsecure)
+			toNullString(network.SourceIP), network.TLSInsecure, network.NoDefaultCert)
 	}
 	return err
 }

@@ -34,6 +34,7 @@ CREATE TABLE Network (
 	enabled INTEGER NOT NULL DEFAULT 1,
 	source_ip TEXT,
 	tls_insecure INTEGER NOT NULL DEFAULT 0,
+	no_default_cert INTEGER NOT NULL DEFAULT 0,
 	FOREIGN KEY(user) REFERENCES User(id),
 	UNIQUE(user, name)
 );

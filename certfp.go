@@ -150,3 +150,17 @@ func generateCertFP(keyType string, bits int) (privKeyBytes, certBytes []byte, e
 
 	return privKeyBytes, certBytes, nil
 }
+
+// sake: clientCert returns the TLS client certificate to present to the
+// upstream server: the network's own, else the user's default one unless the
+// network opted out. Like ZNC's cert module, it's sent regardless of the SASL
+// mechanism, so CertFP-based services logins and oper blocks work too.
+func (net *network) clientCert() (certBlob, privKeyBlob []byte, source string) {
+	if net.SASL.External.CertBlob != nil {
+		return net.SASL.External.CertBlob, net.SASL.External.PrivKeyBlob, "network"
+	}
+	if !net.NoDefaultCert && net.user.SASLExternal.CertBlob != nil {
+		return net.user.SASLExternal.CertBlob, net.user.SASLExternal.PrivKeyBlob, "user default"
+	}
+	return nil, nil, ""
+}

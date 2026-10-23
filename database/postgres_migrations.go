@@ -136,4 +136,6 @@ var postgresMigrations = []string{
 		);
 		CREATE INDEX "Ignore_network_index" ON "Ignore" (network);
 	`,
+	// sake: per-network opt-out of the user's default client certificate
+	`ALTER TABLE "Network" ADD COLUMN no_default_cert BOOLEAN NOT NULL DEFAULT FALSE`,
 }

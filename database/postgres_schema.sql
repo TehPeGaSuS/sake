@@ -36,6 +36,7 @@ CREATE TABLE "Network" (
 	enabled BOOLEAN NOT NULL DEFAULT TRUE,
 	source_ip TEXT,
 	tls_insecure BOOLEAN NOT NULL DEFAULT FALSE,
+	no_default_cert BOOLEAN NOT NULL DEFAULT FALSE,
 	UNIQUE("user", name)
 );
 

@@ -226,7 +226,7 @@ func init() {
 		"network": {
 			children: serviceCommandSet{
 				"create": {
-					usage:  "-addr <addr> [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-source-ip ip] [-tls-insecure true|false] [-connect-command command]...",
+					usage:  "-addr <addr> [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-source-ip ip] [-tls-insecure true|false] [-default-cert true|false] [-connect-command command]...",
 					desc:   "add a new network",
 					handle: handleServiceNetworkCreate,
 				},
@@ -235,7 +235,7 @@ func init() {
 					handle: handleServiceNetworkStatus,
 				},
 				"update": {
-					usage:  "[name] [-addr addr] [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-source-ip ip] [-tls-insecure true|false] [-connect-command command]...",
+					usage:  "[name] [-addr addr] [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-source-ip ip] [-tls-insecure true|false] [-default-cert true|false] [-connect-command command]...",
 					desc:   "update a network",
 					handle: handleServiceNetworkUpdate,
 				},
@@ -294,7 +294,7 @@ func init() {
 				},
 				"reset": {
 					usage:  "[-network name]",
-					desc:   "disable SASL authentication and remove stored credentials",
+					desc:   "disable SASL authentication and remove stored PLAIN credentials (the client certificate stays, see \"certfp remove\")",
 					handle: handleServiceSASLReset,
 				},
 			},
@@ -574,6 +574,7 @@ type networkFlagSet struct {
 	ConnectCommands                                    []string
 	SourceIP                                           *string
 	TLSInsecure                                        *bool
+	DefaultCert                                        *bool // sake
 }
 
 func newNetworkFlagSet() *networkFlagSet {
@@ -591,6 +592,7 @@ func newNetworkFlagSet() *networkFlagSet {
 	fs.Var((*stringSliceFlag)(&fs.ConnectCommands), "connect-command", "")
 	fs.Var(stringPtrFlag{&fs.SourceIP}, "source-ip", "")
 	fs.Var(boolPtrFlag{&fs.TLSInsecure}, "tls-insecure", "")
+	fs.Var(boolPtrFlag{&fs.DefaultCert}, "default-cert", "")
 	return fs
 }
 
@@ -605,6 +607,9 @@ func (fs *networkFlagSet) update(network *database.Network, isAdmin bool) error 
 			}
 		}
 		network.Addr = *fs.Addr
+	}
+	if fs.DefaultCert != nil {
+		network.NoDefaultCert = !*fs.DefaultCert
 	}
 	if fs.Name != nil {
 		if *fs.Name == "*" {
@@ -875,7 +880,11 @@ func storeCertKey(ctx *serviceContext, netName string, isDefault bool, certDER, 
 	}
 	net.SASL.External.CertBlob = certDER
 	net.SASL.External.PrivKeyBlob = privKeyDER
-	net.SASL.Mechanism = "EXTERNAL"
+	// sake: the certificate is sent whatever the mechanism, so don't
+	// override PLAIN credentials
+	if net.SASL.Mechanism == "" {
+		net.SASL.Mechanism = "EXTERNAL"
+	}
 	return ctx.srv.db.StoreNetwork(ctx, ctx.user.ID, &net.Network)
 }
 
@@ -930,7 +939,8 @@ func handleServiceCertFPImport(ctx *serviceContext, params []string) error {
 	// they exist.
 	var pemBytes []byte
 	source := fs.Arg(0)
-	if strings.HasPrefix(strings.TrimSpace(source), "-----BEGIN ") {
+	// PEM exports may start with text such as openssl's "Bag Attributes"
+	if strings.Contains(source, "-----BEGIN ") {
 		pemBytes = []byte(source)
 	} else {
 		if !strings.Contains(source, "://") && !ctx.admin {
@@ -993,7 +1003,7 @@ func handleServiceCertFPRemove(ctx *serviceContext, params []string) error {
 	net.SASL.External.PrivKeyBlob = nil
 	// Without any certificate left to use, keeping SASL EXTERNAL selected
 	// would only make every connection attempt fail authentication.
-	if net.SASL.Mechanism == "EXTERNAL" && ctx.user.SASLExternal.CertBlob == nil {
+	if certBlob, _, _ := net.clientCert(); net.SASL.Mechanism == "EXTERNAL" && certBlob == nil {
 		net.SASL.Mechanism = ""
 	}
 	if err := ctx.srv.db.StoreNetwork(ctx, ctx.user.ID, &net.Network); err != nil {
@@ -1134,8 +1144,8 @@ func handleServiceSASLSetExternal(ctx *serviceContext, params []string) error {
 		return err
 	}
 
-	if net.SASL.External.CertBlob == nil && ctx.user.SASLExternal.CertBlob == nil {
-		return fmt.Errorf("no per-network certificate has been generated/imported, and no default certificate is set for your user (see \"certfp generate -default\"/\"certfp import -default\")")
+	if certBlob, _, _ := net.clientCert(); certBlob == nil {
+		return fmt.Errorf("this network has no certificate of its own and doesn't use your default one (see \"certfp generate\", \"certfp import\" and \"network update -default-cert\")")
 	}
 
 	net.SASL.Mechanism = "EXTERNAL"
@@ -1166,8 +1176,8 @@ func handleServiceSASLReset(ctx *serviceContext, params []string) error {
 
 	net.SASL.Plain.Username = ""
 	net.SASL.Plain.Password = ""
-	net.SASL.External.CertBlob = nil
-	net.SASL.External.PrivKeyBlob = nil
+	// sake: keep the client certificate, it's also used without SASL (see
+	// network.clientCert); "certfp remove" deletes it
 	net.SASL.Mechanism = ""
 
 	if err := ctx.srv.db.StoreNetwork(ctx, ctx.user.ID, &net.Network); err != nil {

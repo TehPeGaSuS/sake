@@ -329,8 +329,10 @@ func (net *network) runConn(ctx context.Context) error {
 		delay = true
 	}
 
-	if uc.network.SASL.Mechanism == "EXTERNAL" && !uc.supportsSASL("EXTERNAL") {
-		uc.logger.Debugf("client certificate configured but the upstream doesn't advertise SASL EXTERNAL, delaying joining channels")
+	// sake: the client certificate is sent whatever the SASL mechanism, so
+	// services may log us in via CertFP shortly after registration
+	if uc.clientCertSent && uc.account == "" {
+		uc.logger.Debugf("client certificate sent but not logged in yet, delaying joining channels")
 		delay = true
 	}
 

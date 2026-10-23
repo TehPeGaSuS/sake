@@ -412,7 +412,7 @@ func (db *SqliteDB) ListNetworks(ctx context.Context, userID int64) ([]Network, 
 		SELECT id, name, addr, nick, username, realname, certfp, pass,
 			connect_commands, sasl_mechanism, sasl_plain_username, sasl_plain_password,
 			sasl_external_cert, sasl_external_key, auto_away, enabled,
-			source_ip, tls_insecure
+			source_ip, tls_insecure, no_default_cert
 		FROM Network
 		WHERE user = ?`,
 		userID)
@@ -430,7 +430,7 @@ func (db *SqliteDB) ListNetworks(ctx context.Context, userID int64) ([]Network, 
 		err := rows.Scan(&net.ID, &name, &net.Addr, &nick, &username, &realname, &certfp,
 			&pass, &connectCommands, &saslMechanism, &saslPlainUsername, &saslPlainPassword,
 			&net.SASL.External.CertBlob, &net.SASL.External.PrivKeyBlob, &net.AutoAway, &net.Enabled,
-			&sourceIP, &net.TLSInsecure)
+			&sourceIP, &net.TLSInsecure, &net.NoDefaultCert)
 		if err != nil {
 			return nil, err
 		}
@@ -467,8 +467,8 @@ func (db *SqliteDB) StoreNetwork(ctx context.Context, userID int64, network *Net
 		case "PLAIN":
 			saslPlainUsername = toNullString(network.SASL.Plain.Username)
 			saslPlainPassword = toNullString(network.SASL.Plain.Password)
-			network.SASL.External.CertBlob = nil
-			network.SASL.External.PrivKeyBlob = nil
+			// sake: keep the client certificate, it's also used for CertFP
+			// without SASL EXTERNAL
 		case "EXTERNAL":
 			// keep saslPlain* nil
 		default:
@@ -494,6 +494,7 @@ func (db *SqliteDB) StoreNetwork(ctx context.Context, userID int64, network *Net
 		sql.Named("enabled", network.Enabled),
 		sql.Named("source_ip", toNullString(network.SourceIP)),
 		sql.Named("tls_insecure", network.TLSInsecure),
+		sql.Named("no_default_cert", network.NoDefaultCert),
 
 		sql.Named("id", network.ID), // only for UPDATE
 		sql.Named("user", userID),   // only for INSERT
@@ -508,7 +509,8 @@ func (db *SqliteDB) StoreNetwork(ctx context.Context, userID int64, network *Net
 				sasl_mechanism = :sasl_mechanism, sasl_plain_username = :sasl_plain_username, sasl_plain_password = :sasl_plain_password,
 				sasl_external_cert = :sasl_external_cert, sasl_external_key = :sasl_external_key,
 				auto_away = :auto_away, enabled = :enabled,
-				source_ip = :source_ip, tls_insecure = :tls_insecure
+				source_ip = :source_ip, tls_insecure = :tls_insecure,
+				no_default_cert = :no_default_cert
 			WHERE id = :id`, args...)
 	} else {
 		var res sql.Result
@@ -516,11 +518,11 @@ func (db *SqliteDB) StoreNetwork(ctx context.Context, userID int64, network *Net
 			INSERT INTO Network(user, name, addr, nick, username, realname, certfp, pass,
 				connect_commands, sasl_mechanism, sasl_plain_username,
 				sasl_plain_password, sasl_external_cert, sasl_external_key, auto_away, enabled,
-				source_ip, tls_insecure)
+				source_ip, tls_insecure, no_default_cert)
 			VALUES (:user, :name, :addr, :nick, :username, :realname, :certfp, :pass,
 				:connect_commands, :sasl_mechanism, :sasl_plain_username,
 				:sasl_plain_password, :sasl_external_cert, :sasl_external_key, :auto_away, :enabled,
-				:source_ip, :tls_insecure)`,
+				:source_ip, :tls_insecure, :no_default_cert)`,
 			args...)
 		if err != nil {
 			return err

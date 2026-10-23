@@ -242,6 +242,9 @@ type upstreamConn struct {
 
 	gotMotd bool
 
+	// sake: a TLS client certificate was presented (see network.clientCert)
+	clientCertSent bool
+
 	hasDesiredNick bool
 }
 
@@ -257,6 +260,7 @@ func connectToUpstream(ctx context.Context, network *network) (*upstreamConn, er
 	}
 
 	var netConn net.Conn
+	clientCertSent := false // sake
 	switch u.Scheme {
 	case "ircs":
 		addr := u.Host
@@ -267,16 +271,13 @@ func connectToUpstream(ctx context.Context, network *network) (*upstreamConn, er
 		}
 
 		tlsConfig := &tls.Config{ServerName: host, NextProtos: []string{"irc"}}
-		if network.SASL.Mechanism == "EXTERNAL" {
-			// sake: fall back to the user's default SASL EXTERNAL certificate
-			// when the network doesn't have its own
-			certBlob, privKeyBlob, source := network.SASL.External.CertBlob, network.SASL.External.PrivKeyBlob, "network"
-			if certBlob == nil {
-				certBlob, privKeyBlob, source = network.user.SASLExternal.CertBlob, network.user.SASLExternal.PrivKeyBlob, "user default"
-			}
-			if certBlob == nil {
-				return nil, fmt.Errorf("missing certificate for authentication")
-			}
+		// sake: present the client certificate whatever the SASL mechanism
+		// (see network.clientCert)
+		certBlob, privKeyBlob, source := network.clientCert()
+		if certBlob == nil && network.SASL.Mechanism == "EXTERNAL" {
+			return nil, fmt.Errorf("missing certificate for authentication")
+		}
+		if certBlob != nil {
 			if privKeyBlob == nil {
 				return nil, fmt.Errorf("missing private key for authentication")
 			}
@@ -291,6 +292,7 @@ func connectToUpstream(ctx context.Context, network *network) (*upstreamConn, er
 				},
 			}
 			logger.Printf("using %s TLS client certificate %x", source, sha256.Sum256(certBlob))
+			clientCertSent = true
 		}
 
 		if network.TLSInsecure {
@@ -371,6 +373,7 @@ func connectToUpstream(ctx context.Context, network *network) (*upstreamConn, er
 
 	cm := stdCaseMapping
 	uc := &upstreamConn{
+		clientCertSent:        clientCertSent,
 		conn:                  newConn(network.user.srv, newNetIRCConn(netConn), &options),
 		network:               network,
 		user:                  network.user,

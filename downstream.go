@@ -2830,8 +2830,8 @@ func (dc *downstreamConn) handleMessageRegistered(ctx context.Context, msg *irc.
 				record := uc.network.Network // copy network record because we'll mutate it
 				record.SASL.Plain.Username = ""
 				record.SASL.Plain.Password = ""
-				record.SASL.External.CertBlob = nil
-				record.SASL.External.PrivKeyBlob = nil
+				// sake: the client certificate isn't only used for SASL
+				// (see network.clientCert), so keep it
 				record.SASL.Mechanism = ""
 				_, err := dc.user.updateNetwork(ctx, &record, false)
 				if err != nil {

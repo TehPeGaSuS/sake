@@ -265,4 +265,6 @@ var sqliteMigrations = []string{
 		);
 		CREATE INDEX Ignore_network_index ON Ignore(network);
 	`,
+	// sake: per-network opt-out of the user's default client certificate
+	"ALTER TABLE Network ADD COLUMN no_default_cert INTEGER NOT NULL DEFAULT 0",
 }
