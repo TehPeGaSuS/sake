@@ -26,7 +26,7 @@
 
   <label>SASL mechanism</label>
   <select name="sasl_mechanism">
-    <option value="" {{if eq .Network.SASL.Mechanism ""}}selected{{end}}>None</option>
+    <option value="" {{if eq .Network.SASL.Mechanism ""}}selected{{end}}>None (clears saved SASL credentials and this network's certificate)</option>
     <option value="PLAIN" {{if eq .Network.SASL.Mechanism "PLAIN"}}selected{{end}}>PLAIN (username/password)</option>
     <option value="EXTERNAL" {{if eq .Network.SASL.Mechanism "EXTERNAL"}}selected{{end}}>EXTERNAL (client certificate)</option>
   </select>
@@ -85,6 +85,33 @@
 {{end}}
 </table>
 <p><a class="button" href="/admin/networks/{{.Network.ID}}/channels/new{{if .TargetUsername}}?username={{.TargetUsername}}{{end}}">Add channel</a></p>
+
+<h2 id="ignores">Ignores</h2>
+<p class="muted">Messages from matching senders are still logged (so history and search keep them), but never delivered live to any of your clients. Masks are case-insensitive <code>nick!user@host</code> globs; a bare nick means <code>nick!*@*</code>.</p>
+<table>
+<tr><th>Mask</th><th>Added</th><th></th></tr>
+{{range .Ignores}}
+<tr>
+  <td><code>{{.Mask}}</code></td>
+  <td class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+  <td>
+    <form method="post" action="/admin/networks/{{$.Network.ID}}/ignores/{{.ID}}/delete">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      {{if $.TargetUsername}}<input type="hidden" name="username" value="{{$.TargetUsername}}">{{end}}
+      <button type="submit" class="danger">remove</button>
+    </form>
+  </td>
+</tr>
+{{else}}
+<tr><td colspan="3" class="muted">Nobody is ignored on this network.</td></tr>
+{{end}}
+</table>
+<form method="post" action="/admin/networks/{{.Network.ID}}/ignores" class="row">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{if .TargetUsername}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
+  <div><input type="text" name="mask" placeholder="nick, or nick!user@host with * and ?" required></div>
+  <div class="shrink"><button type="submit">Add ignore</button></div>
+</form>
 {{end}}
 {{end}}
 {{template "layout" .}}

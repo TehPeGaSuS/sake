@@ -264,9 +264,14 @@ func init() {
 					handle: handleServiceCertFPFingerprints,
 				},
 				"import": {
-					usage:  "[-network name | -default] <path-or-https-url>",
-					desc:   "import an existing certificate and private key (PEM, concatenated) from a local file or an https:// URL",
+					usage:  "[-network name | -default] <https-url-or-path>",
+					desc:   "import an existing certificate and private key (PEM, concatenated) from an https:// URL, or from a local file (admins only)",
 					handle: handleServiceCertFPImport,
+				},
+				"remove": {
+					usage:  "[-network name | -default]",
+					desc:   "remove a network's certificate (falling back to your default one), or your default certificate",
+					handle: handleServiceCertFPRemove,
 				},
 			},
 		},
@@ -340,12 +345,12 @@ func init() {
 					handle: handleServiceChannelStatus,
 				},
 				"create": {
-					usage:  "<name> [-detached true|false] [-relay-detached default|none|highlight|message] [-reattach-on default|none|highlight|message] [-detach-after <duration>] [-detach-on default|none|highlight|message]",
+					usage:  "<name> [-key key] [-detached true|false] [-relay-detached default|none|highlight|message] [-reattach-on default|none|highlight|message] [-detach-after <duration>] [-detach-on default|none|highlight|message]",
 					desc:   "create a channel",
 					handle: handleServiceChannelCreate,
 				},
 				"update": {
-					usage:  "<name> [-detached true|false] [-relay-detached default|none|highlight|message] [-reattach-on default|none|highlight|message] [-detach-after <duration>] [-detach-on default|none|highlight|message]",
+					usage:  "<name> [-key key] [-detached true|false] [-relay-detached default|none|highlight|message] [-reattach-on default|none|highlight|message] [-detach-after <duration>] [-detach-on default|none|highlight|message]",
 					desc:   "update a channel",
 					handle: handleServiceChannelUpdate,
 				},
@@ -918,9 +923,24 @@ func handleServiceCertFPImport(ctx *serviceContext, params []string) error {
 		return fmt.Errorf("expected exactly one argument")
 	}
 
-	pemBytes, err := readCertKeyPEM(ctx, fs.Arg(0))
-	if err != nil {
-		return err
+	// sake: the argument may also be the PEM text itself (used by the
+	// webadmin, since IRC lines can't carry the newlines PEM needs). Local
+	// file paths are admin-only: otherwise any user could make the bouncer
+	// open arbitrary files it can read, and tell from the error whether
+	// they exist.
+	var pemBytes []byte
+	source := fs.Arg(0)
+	if strings.HasPrefix(strings.TrimSpace(source), "-----BEGIN ") {
+		pemBytes = []byte(source)
+	} else {
+		if !strings.Contains(source, "://") && !ctx.admin {
+			return fmt.Errorf("importing from a local file is restricted to admins, use an https:// URL")
+		}
+		var err error
+		pemBytes, err = readCertKeyPEM(ctx, source)
+		if err != nil {
+			return err
+		}
 	}
 
 	certDER, privKeyDER, err := ParseCertKeyPEM(pemBytes)
@@ -934,6 +954,52 @@ func handleServiceCertFPImport(ctx *serviceContext, params []string) error {
 
 	ctx.print("certificate imported")
 	sendCertfpFingerprints(ctx, certDER)
+	return nil
+}
+
+// sake
+func handleServiceCertFPRemove(ctx *serviceContext, params []string) error {
+	fs := newFlagSet()
+	netName := fs.String("network", "", "select a network")
+	isDefault := fs.Bool("default", false, "remove your user's default certificate")
+
+	if err := fs.Parse(params); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected argument: %v", fs.Arg(0))
+	}
+
+	if *isDefault {
+		if *netName != "" {
+			return fmt.Errorf("flags -network and -default are mutually exclusive")
+		}
+		if err := ctx.user.updateUser(ctx, func(record *database.User) error {
+			record.SASLExternal.CertBlob = nil
+			record.SASLExternal.PrivKeyBlob = nil
+			return nil
+		}); err != nil {
+			return err
+		}
+		ctx.print("default certificate removed")
+		return nil
+	}
+
+	net, err := getNetworkFromFlag(ctx, *netName)
+	if err != nil {
+		return err
+	}
+	net.SASL.External.CertBlob = nil
+	net.SASL.External.PrivKeyBlob = nil
+	// Without any certificate left to use, keeping SASL EXTERNAL selected
+	// would only make every connection attempt fail authentication.
+	if net.SASL.Mechanism == "EXTERNAL" && ctx.user.SASLExternal.CertBlob == nil {
+		net.SASL.Mechanism = ""
+	}
+	if err := ctx.srv.db.StoreNetwork(ctx, ctx.user.ID, &net.Network); err != nil {
+		return err
+	}
+	ctx.print("certificate removed")
 	return nil
 }
 
@@ -1561,10 +1627,12 @@ type channelFlagSet struct {
 	*flag.FlagSet
 	Detached                                         *bool
 	RelayDetached, ReattachOn, DetachAfter, DetachOn *string
+	Key                                              *string // sake
 }
 
 func newChannelFlagSet() *channelFlagSet {
 	fs := &channelFlagSet{FlagSet: newFlagSet()}
+	fs.Var(stringPtrFlag{&fs.Key}, "key", "")
 	fs.Var(boolPtrFlag{&fs.Detached}, "detached", "")
 	fs.Var(stringPtrFlag{&fs.RelayDetached}, "relay-detached", "")
 	fs.Var(stringPtrFlag{&fs.ReattachOn}, "reattach-on", "")
@@ -1574,6 +1642,9 @@ func newChannelFlagSet() *channelFlagSet {
 }
 
 func (fs *channelFlagSet) update(channel *database.Channel) error {
+	if fs.Key != nil {
+		channel.Key = *fs.Key
+	}
 	if fs.RelayDetached != nil {
 		filter, err := parseFilter(*fs.RelayDetached)
 		if err != nil {
@@ -1668,9 +1739,13 @@ func handleServiceChannelCreate(ctx *serviceContext, params []string) error {
 	}
 
 	if network.conn != nil {
+		joinParams := []string{ch.Name}
+		if ch.Key != "" {
+			joinParams = append(joinParams, ch.Key)
+		}
 		network.conn.SendMessage(ctx, &irc.Message{
 			Command: "JOIN",
-			Params:  []string{ch.Name},
+			Params:  joinParams,
 		})
 	}
 

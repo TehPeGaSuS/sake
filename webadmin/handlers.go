@@ -3,13 +3,16 @@ package webadmin
 import (
 	"context"
 	"embed"
-	"encoding/hex"
+	"errors"
 	"html/template"
 	"net/http"
+	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	sake "github.com/TehPeGaSuS/sake"
 	"github.com/TehPeGaSuS/sake/database"
 )
 
@@ -21,15 +24,17 @@ var templateFS embed.FS
 // together - otherwise the "body" definitions collide and only one survives.
 var pages = map[string]*template.Template{}
 
+// certFPHex strips the "sha-256:"/"sha-512:" storage prefix so the form
+// field round-trips as plain hex, matching what a user would paste in.
+func certFPHex(certFP string) string {
+	if i := strings.IndexByte(certFP, ':'); i >= 0 {
+		return certFP[i+1:]
+	}
+	return certFP
+}
+
 var templateFuncs = template.FuncMap{
-	// certFPHex strips the "sha-256:"/"sha-512:" storage prefix so the form
-	// field round-trips as plain hex, matching what a user would paste in.
-	"certFPHex": func(certFP string) string {
-		if i := strings.IndexByte(certFP, ':'); i >= 0 {
-			return certFP[i+1:]
-		}
-		return certFP
-	},
+	"certFPHex": certFPHex,
 	// connectedFor formats how long ago a session connected, e.g. "3h12m".
 	"connectedFor": func(t time.Time) string {
 		return time.Since(t).Round(time.Second).String()
@@ -152,35 +157,45 @@ func (h *Handler) handleAccountForm(w http.ResponseWriter, r *http.Request, acto
 }
 
 func (h *Handler) handleAccountSave(w http.ResponseWriter, r *http.Request, actor *database.User) {
+	ctx := r.Context()
+	orig := *actor
+
 	actor.Nick = r.FormValue("nick")
 	actor.Realname = r.FormValue("realname")
 	if actor.Admin {
 		actor.SourceIP = r.FormValue("source_ip")
 	}
+
+	var args []string
+	args = flagIfChanged(args, "nick", orig.Nick, actor.Nick)
+	args = flagIfChanged(args, "realname", orig.Realname, actor.Realname)
+	if actor.Admin {
+		args = flagIfChanged(args, "source-ip", orig.SourceIP, actor.SourceIP)
+	}
 	if pw := r.FormValue("password"); pw != "" {
-		if err := actor.SetPassword(pw); err != nil {
+		args = append(args, flagArg("password", pw))
+	}
+	if len(args) > 0 {
+		if err := h.runAs(ctx, actor.Username, false, append([]string{"user", "update"}, args...)...); err != nil {
 			h.renderAccount(w, r, actor, err.Error())
 			return
 		}
 	}
 
 	if r.FormValue("remove_default_cert") == "on" {
-		actor.SASLExternal.CertBlob = nil
-		actor.SASLExternal.PrivKeyBlob = nil
-	} else if pemText := r.FormValue("default_cert_pem"); pemText != "" {
-		certDER, keyDER, err := parseClientCertPEM(pemText)
-		if err != nil {
+		if len(orig.SASLExternal.CertBlob) > 0 {
+			if err := h.runAs(ctx, actor.Username, false, "certfp", "remove", "-default"); err != nil {
+				h.renderAccount(w, r, actor, "default certificate: "+err.Error())
+				return
+			}
+		}
+	} else if pemText := strings.TrimSpace(r.FormValue("default_cert_pem")); pemText != "" {
+		if err := h.runAs(ctx, actor.Username, false, "certfp", "import", "-default", "--", pemText); err != nil {
 			h.renderAccount(w, r, actor, "default certificate: "+err.Error())
 			return
 		}
-		actor.SASLExternal.CertBlob = certDER
-		actor.SASLExternal.PrivKeyBlob = keyDER
 	}
 
-	if err := h.DB.StoreUser(r.Context(), actor); err != nil {
-		h.renderAccount(w, r, actor, err.Error())
-		return
-	}
 	http.Redirect(w, r, "/admin/account", http.StatusFound)
 }
 
@@ -294,6 +309,13 @@ func (h *Handler) renderNetwork(w http.ResponseWriter, r *http.Request, actor *d
 			return
 		}
 		extra["Channels"] = channels
+
+		ignores, err := h.DB.ListIgnores(r.Context(), net.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		extra["Ignores"] = ignores
 	}
 	h.render(w, r, "network.html", "Network", actor, errMsg, extra)
 }
@@ -315,6 +337,14 @@ func (h *Handler) handleNetworkSave(w http.ResponseWriter, r *http.Request, acto
 		return
 	}
 
+	ctx := r.Context()
+	asAdmin := target.Username != actor.Username
+	isNew := net.ID == 0
+	orig := *net
+	oldName := orig.GetName()
+
+	// net becomes the desired state, so re-rendering on error keeps what
+	// the user typed.
 	net.Name = r.FormValue("name")
 	net.Addr = r.FormValue("addr")
 	net.Nick = r.FormValue("nick")
@@ -325,7 +355,6 @@ func (h *Handler) handleNetworkSave(w http.ResponseWriter, r *http.Request, acto
 	}
 	net.AutoAway = r.FormValue("auto_away") == "on"
 	net.Enabled = r.FormValue("enabled") == "on"
-
 	net.ConnectCommands = nil
 	for _, line := range strings.Split(r.FormValue("connect_commands"), "\n") {
 		line = strings.TrimSpace(line)
@@ -333,79 +362,136 @@ func (h *Handler) handleNetworkSave(w http.ResponseWriter, r *http.Request, acto
 			net.ConnectCommands = append(net.ConnectCommands, line)
 		}
 	}
-
-	if certFP := r.FormValue("certfp"); certFP != "" {
-		normalized := strings.ToLower(strings.ReplaceAll(certFP, ":", ""))
-		if _, err := hex.DecodeString(normalized); err != nil {
-			h.renderNetwork(w, r, actor, net, target, "server certificate fingerprint must be hex-encoded")
-			return
-		}
-		switch len(normalized) {
-		case 64:
-			net.CertFP = "sha-256:" + normalized
-		case 128:
-			net.CertFP = "sha-512:" + normalized
-		default:
-			h.renderNetwork(w, r, actor, net, target, "server certificate fingerprint must be a SHA-256 or SHA-512 hash")
-			return
-		}
-	} else {
-		net.CertFP = ""
-	}
-
-	// SASL EXTERNAL certificate: update it independently of the chosen
-	// mechanism below, so a cert pasted here is preserved even if the
-	// mechanism is temporarily switched away and back.
-	if r.FormValue("remove_client_cert") == "on" {
-		net.SASL.External.CertBlob = nil
-		net.SASL.External.PrivKeyBlob = nil
-	} else if clientCertPEM := r.FormValue("client_cert_pem"); clientCertPEM != "" {
-		certDER, keyDER, err := parseClientCertPEM(clientCertPEM)
-		if err != nil {
-			h.renderNetwork(w, r, actor, net, target, "client certificate: "+err.Error())
-			return
-		}
-		net.SASL.External.CertBlob = certDER
-		net.SASL.External.PrivKeyBlob = keyDER
-	}
-
-	switch mech := r.FormValue("sasl_mechanism"); mech {
-	case "PLAIN":
-		if u := r.FormValue("sasl_username"); u != "" {
-			net.SASL.Plain.Username = u
-		}
-		if p := r.FormValue("sasl_password"); p != "" {
-			net.SASL.Plain.Password = p
-		}
-		net.SASL.Mechanism = "PLAIN"
-	case "EXTERNAL":
-		if net.SASL.External.CertBlob == nil && target.SASLExternal.CertBlob == nil {
-			h.renderNetwork(w, r, actor, net, target, "SASL EXTERNAL requires either a certificate for this network or a default certificate set on the account")
-			return
-		}
-		net.SASL.Mechanism = "EXTERNAL"
-	case "":
-		net.SASL.Mechanism = ""
-	default:
-		h.renderNetwork(w, r, actor, net, target, "unsupported SASL mechanism")
-		return
-	}
-
+	certFP := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(r.FormValue("certfp")), ":", ""))
 	if actor.Admin {
 		net.SourceIP = r.FormValue("source_ip")
 		net.TLSInsecure = r.FormValue("tls_insecure") == "on"
 	}
 
-	if err := h.DB.StoreNetwork(r.Context(), target.ID, net); err != nil {
-		h.renderNetwork(w, r, actor, net, target, err.Error())
+	// Only send what changed: any "network update" makes the bouncer
+	// reconnect to the server, so saving an untouched form must be a no-op.
+	// For a new network, compare against the zero value instead.
+	var args []string
+	args = flagIfChanged(args, "addr", orig.Addr, net.Addr)
+	args = flagIfChanged(args, "name", orig.Name, net.Name)
+	args = flagIfChanged(args, "nick", orig.Nick, net.Nick)
+	args = flagIfChanged(args, "username", orig.Username, net.Username)
+	args = flagIfChanged(args, "realname", orig.Realname, net.Realname)
+	args = flagIfChanged(args, "pass", orig.Pass, net.Pass)
+	args = flagIfChanged(args, "certfp", certFPHex(orig.CertFP), certFP)
+	if isNew || orig.AutoAway != net.AutoAway {
+		args = append(args, flagArg("auto-away", strconv.FormatBool(net.AutoAway)))
+	}
+	if isNew || orig.Enabled != net.Enabled {
+		args = append(args, flagArg("enabled", strconv.FormatBool(net.Enabled)))
+	}
+	if !slices.Equal(orig.ConnectCommands, net.ConnectCommands) {
+		if len(net.ConnectCommands) == 0 {
+			args = append(args, flagArg("connect-command", "")) // clears the list
+		}
+		for _, cmd := range net.ConnectCommands {
+			args = append(args, flagArg("connect-command", cmd))
+		}
+	}
+	if actor.Admin {
+		args = flagIfChanged(args, "source-ip", orig.SourceIP, net.SourceIP)
+		if orig.TLSInsecure != net.TLSInsecure {
+			args = append(args, flagArg("tls-insecure", strconv.FormatBool(net.TLSInsecure)))
+		}
+	}
+
+	if isNew {
+		if err := h.runAs(ctx, target.Username, asAdmin, append([]string{"network", "create"}, args...)...); err != nil {
+			h.renderNetwork(w, r, actor, net, target, err.Error())
+			return
+		}
+	} else if len(args) > 0 {
+		if err := h.runAs(ctx, target.Username, asAdmin, append([]string{"network", "update", oldName}, args...)...); err != nil {
+			h.renderNetwork(w, r, actor, net, target, err.Error())
+			return
+		}
+	}
+	name := net.GetName()
+
+	// Certificate first: importing one switches the mechanism to EXTERNAL,
+	// so the mechanism chosen below has to be applied after it.
+	certImported, certRemoved := false, false
+	if r.FormValue("remove_client_cert") == "on" {
+		if len(orig.SASL.External.CertBlob) > 0 {
+			if err := h.runAs(ctx, target.Username, asAdmin, "certfp", "remove", "-network", name); err != nil {
+				h.renderNetwork(w, r, actor, net, target, "client certificate: "+err.Error())
+				return
+			}
+			certRemoved = true
+		}
+	} else if pemText := strings.TrimSpace(r.FormValue("client_cert_pem")); pemText != "" {
+		if err := h.runAs(ctx, target.Username, asAdmin, "certfp", "import", "-network", name, "--", pemText); err != nil {
+			h.renderNetwork(w, r, actor, net, target, "client certificate: "+err.Error())
+			return
+		}
+		certImported = true
+	}
+
+	var saslArgs []string
+	switch mech := r.FormValue("sasl_mechanism"); mech {
+	case "PLAIN":
+		saslUser := r.FormValue("sasl_username")
+		if saslUser == "" {
+			saslUser = orig.SASL.Plain.Username
+		}
+		saslPass := r.FormValue("sasl_password")
+		if saslPass == "" {
+			saslPass = orig.SASL.Plain.Password
+		}
+		if certImported || orig.SASL.Mechanism != "PLAIN" || saslUser != orig.SASL.Plain.Username || saslPass != orig.SASL.Plain.Password {
+			if saslUser == "" || saslPass == "" {
+				h.renderNetwork(w, r, actor, net, target, "SASL PLAIN needs both a username and a password")
+				return
+			}
+			saslArgs = []string{"sasl", "set-plain", "-network", name, "--", saslUser, saslPass}
+		}
+	case "EXTERNAL":
+		if !certImported && (orig.SASL.Mechanism != "EXTERNAL" || certRemoved) {
+			saslArgs = []string{"sasl", "set-external", "-network", name}
+		}
+	case "":
+		if orig.SASL.Mechanism != "" || certImported {
+			saslArgs = []string{"sasl", "reset", "-network", name}
+		}
+	default:
+		h.renderNetwork(w, r, actor, net, target, "unsupported SASL mechanism")
 		return
+	}
+	if saslArgs != nil {
+		if err := h.runAs(ctx, target.Username, asAdmin, saslArgs...); err != nil {
+			h.renderNetwork(w, r, actor, net, target, "SASL: "+err.Error())
+			return
+		}
 	}
 
 	redirect := "/admin/"
-	if target.Username != actor.Username {
-		redirect = "/admin/networks/" + strconv.FormatInt(net.ID, 10) + "?username=" + target.Username
+	if asAdmin {
+		redirect = "/admin/users/" + url.PathEscape(target.Username)
+		if saved, err := h.networkByName(ctx, target.ID, name); err == nil && saved != nil {
+			redirect = "/admin/networks/" + strconv.FormatInt(saved.ID, 10) + "?username=" + url.QueryEscape(target.Username)
+		}
 	}
 	http.Redirect(w, r, redirect, http.StatusFound)
+}
+
+// networkByName finds a user's network by its display name (Name, or Addr
+// when unnamed), the way BouncerServ commands refer to networks.
+func (h *Handler) networkByName(ctx context.Context, userID int64, name string) (*database.Network, error) {
+	networks, err := h.DB.ListNetworks(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range networks {
+		if networks[i].GetName() == name {
+			return &networks[i], nil
+		}
+	}
+	return nil, nil
 }
 
 func (h *Handler) handleNetworkDelete(w http.ResponseWriter, r *http.Request, actor *database.User) {
@@ -422,28 +508,26 @@ func (h *Handler) handleNetworkDelete(w http.ResponseWriter, r *http.Request, ac
 	}
 
 	// Ensure the network actually belongs to the resolved target before deleting.
-	networks, err := h.DB.ListNetworks(r.Context(), target.ID)
+	net, ok, err := h.findNetwork(r.Context(), target.ID, strconv.FormatInt(id, 10))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	owned := false
-	for _, n := range networks {
-		if n.ID == id {
-			owned = true
-			break
-		}
-	}
-	if !owned {
+	if !ok {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 
-	if err := h.DB.DeleteNetwork(r.Context(), id); err != nil {
+	asAdmin := target.Username != actor.Username
+	if err := h.runAs(r.Context(), target.Username, asAdmin, "network", "delete", net.GetName()); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/admin/", http.StatusFound)
+	redirect := "/admin/"
+	if asAdmin {
+		redirect = "/admin/users/" + url.PathEscape(target.Username)
+	}
+	http.Redirect(w, r, redirect, http.StatusFound)
 }
 
 // --- admin: user management ---
@@ -476,9 +560,10 @@ func (h *Handler) handleUserSave(w http.ResponseWriter, r *http.Request, actor *
 	usernameParam := r.PathValue("username")
 	existing := usernameParam != "" && usernameParam != "new"
 
+	ctx := r.Context()
 	u := database.NewUser("")
 	if existing {
-		found, err := h.DB.GetUser(r.Context(), usernameParam)
+		found, err := h.DB.GetUser(ctx, usernameParam)
 		if err != nil {
 			http.NotFound(w, r)
 			return
@@ -486,6 +571,12 @@ func (h *Handler) handleUserSave(w http.ResponseWriter, r *http.Request, actor *
 		u = found
 	} else {
 		u.Username = r.FormValue("username")
+	}
+	orig := *u
+	if !existing {
+		// compare against what "user create" defaults to, not NewUser's
+		// pre-filled values, so explicit choices are always sent
+		orig = database.User{}
 	}
 
 	u.Nick = r.FormValue("nick")
@@ -496,19 +587,76 @@ func (h *Handler) handleUserSave(w http.ResponseWriter, r *http.Request, actor *
 	if mn, err := strconv.Atoi(r.FormValue("max_networks")); err == nil {
 		u.MaxNetworks = mn
 	}
-	if pw := r.FormValue("password"); pw != "" {
-		if err := u.SetPassword(pw); err != nil {
-			h.render(w, r, "user.html", "User", actor, err.Error(), map[string]any{"User": u, "Existing": existing})
-			return
-		}
-	} else if !existing {
-		h.render(w, r, "user.html", "User", actor, "password is required for new users", map[string]any{"User": u, "Existing": existing})
+	password := r.FormValue("password")
+	fail := func(msg string) {
+		h.render(w, r, "user.html", "User", actor, msg, map[string]any{"User": u, "Existing": existing})
+	}
+
+	self := existing && u.Username == actor.Username
+	if self && (u.Admin != orig.Admin || u.Enabled != orig.Enabled) {
+		fail("you can't change the admin or enabled flags of your own account")
 		return
 	}
 
-	if err := h.DB.StoreUser(r.Context(), u); err != nil {
-		h.render(w, r, "user.html", "User", actor, err.Error(), map[string]any{"User": u, "Existing": existing})
-		return
+	// Account-level flags, run from the admin's own context ("user create",
+	// or "user update <name>" for someone else).
+	var args []string
+	if !self {
+		if !existing || u.Admin != orig.Admin {
+			args = append(args, flagArg("admin", strconv.FormatBool(u.Admin)))
+		}
+		if !existing || u.Enabled != orig.Enabled {
+			args = append(args, flagArg("enabled", strconv.FormatBool(u.Enabled)))
+		}
+	}
+	if u.MaxNetworks != orig.MaxNetworks {
+		args = append(args, flagArg("max-networks", strconv.Itoa(u.MaxNetworks)))
+	}
+	args = flagIfChanged(args, "source-ip", orig.SourceIP, u.SourceIP)
+	if password != "" {
+		args = append(args, flagArg("password", password))
+	}
+
+	// Nick/realname can only be changed by the user themself, so for other
+	// existing users they go through that user's own context instead
+	// (like "user run <name> user update -nick ...").
+	var identityArgs []string
+	identityArgs = flagIfChanged(identityArgs, "nick", orig.Nick, u.Nick)
+	identityArgs = flagIfChanged(identityArgs, "realname", orig.Realname, u.Realname)
+
+	switch {
+	case !existing:
+		if password == "" {
+			fail("password is required for new users")
+			return
+		}
+		cmd := append([]string{"user", "create", flagArg("username", u.Username)}, args...)
+		cmd = append(cmd, identityArgs...)
+		if err := h.runAs(ctx, actor.Username, true, cmd...); err != nil {
+			fail(err.Error())
+			return
+		}
+	case self:
+		args = append(args, identityArgs...)
+		if len(args) > 0 {
+			if err := h.runAs(ctx, actor.Username, true, append([]string{"user", "update"}, args...)...); err != nil {
+				fail(err.Error())
+				return
+			}
+		}
+	default:
+		if len(args) > 0 {
+			if err := h.runAs(ctx, actor.Username, true, append([]string{"user", "update", u.Username}, args...)...); err != nil {
+				fail(err.Error())
+				return
+			}
+		}
+		if len(identityArgs) > 0 {
+			if err := h.runAs(ctx, u.Username, true, append([]string{"user", "update"}, identityArgs...)...); err != nil {
+				fail(err.Error())
+				return
+			}
+		}
 	}
 	http.Redirect(w, r, "/admin/users", http.StatusFound)
 }
@@ -519,12 +667,13 @@ func (h *Handler) handleUserDelete(w http.ResponseWriter, r *http.Request, actor
 		http.Error(w, "cannot delete your own account", http.StatusBadRequest)
 		return
 	}
-	u, err := h.DB.GetUser(r.Context(), username)
-	if err != nil {
+	if _, err := h.DB.GetUser(r.Context(), username); err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	if err := h.DB.DeleteUser(r.Context(), u.ID); err != nil {
+	// "user delete" also stops the user's bouncer and closes their
+	// connections, which a bare database delete wouldn't do.
+	if err := h.runAs(r.Context(), actor.Username, true, "user", "delete", username, sake.UserDeleteToken(username)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -624,32 +773,33 @@ func (h *Handler) handleChannelSave(w http.ResponseWriter, r *http.Request, acto
 		return
 	}
 
-	if ch.ID == 0 {
-		ch.Name = r.FormValue("name")
+	isNew := ch.ID == 0
+	if isNew {
+		ch.Name = strings.TrimSpace(r.FormValue("name"))
 	}
 	ch.Key = r.FormValue("key")
 	ch.Detached = r.FormValue("detached") == "on"
 
-	filter, ok := messageFilterNames[r.FormValue("relay_detached")]
-	if !ok {
-		h.renderChannel(w, r, actor, ch, net, target.Username, "invalid value for relay-while-detached")
-		return
+	// The select values are BouncerServ's own filter names; keep the parsed
+	// copy in ch so a failed save re-renders with the user's choices.
+	var args []string
+	for _, f := range []struct {
+		form, flag string
+		dst        *database.MessageFilter
+	}{
+		{"relay_detached", "relay-detached", &ch.RelayDetached},
+		{"reattach_on", "reattach-on", &ch.ReattachOn},
+		{"detach_on", "detach-on", &ch.DetachOn},
+	} {
+		v := r.FormValue(f.form)
+		filter, ok := messageFilterNames[v]
+		if !ok {
+			h.renderChannel(w, r, actor, ch, net, target.Username, "invalid value for "+f.flag)
+			return
+		}
+		*f.dst = filter
+		args = append(args, flagArg(f.flag, v))
 	}
-	ch.RelayDetached = filter
-
-	filter, ok = messageFilterNames[r.FormValue("reattach_on")]
-	if !ok {
-		h.renderChannel(w, r, actor, ch, net, target.Username, "invalid value for reattach-on")
-		return
-	}
-	ch.ReattachOn = filter
-
-	filter, ok = messageFilterNames[r.FormValue("detach_on")]
-	if !ok {
-		h.renderChannel(w, r, actor, ch, net, target.Username, "invalid value for auto-detach-on")
-		return
-	}
-	ch.DetachOn = filter
 
 	minutes, err := strconv.ParseInt(r.FormValue("detach_after_minutes"), 10, 64)
 	if err != nil || minutes < 0 {
@@ -657,10 +807,30 @@ func (h *Handler) handleChannelSave(w http.ResponseWriter, r *http.Request, acto
 		return
 	}
 	ch.DetachAfter = time.Duration(minutes) * time.Minute
+	args = append(args, flagArg("detach-after", strconv.FormatInt(minutes, 10)+"m"), flagArg("key", ch.Key))
 
-	if err := h.DB.StoreChannel(r.Context(), net.ID, ch); err != nil {
-		h.renderChannel(w, r, actor, ch, net, target.Username, err.Error())
-		return
+	// BouncerServ addresses channels as "<channel>/<network>" when the
+	// command isn't sent from a network-bound connection.
+	qualified := ch.Name + "/" + net.GetName()
+	asAdmin := target.Username != actor.Username
+	if isNew {
+		if err := h.runAs(r.Context(), target.Username, asAdmin, append([]string{"channel", "create", qualified}, args...)...); err != nil {
+			h.renderChannel(w, r, actor, ch, net, target.Username, err.Error())
+			return
+		}
+		// "channel create" always joins: detaching is a separate step
+		if ch.Detached {
+			if err := h.runAs(r.Context(), target.Username, asAdmin, "channel", "update", qualified, flagArg("detached", "true")); err != nil {
+				h.renderChannel(w, r, actor, ch, net, target.Username, err.Error())
+				return
+			}
+		}
+	} else {
+		args = append(args, flagArg("detached", strconv.FormatBool(ch.Detached)))
+		if err := h.runAs(r.Context(), target.Username, asAdmin, append([]string{"channel", "update", qualified}, args...)...); err != nil {
+			h.renderChannel(w, r, actor, ch, net, target.Username, err.Error())
+			return
+		}
 	}
 
 	redirect := "/admin/networks/" + strconv.FormatInt(net.ID, 10)
@@ -687,7 +857,8 @@ func (h *Handler) handleChannelDelete(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 
-	if err := h.DB.DeleteChannel(r.Context(), ch.ID); err != nil {
+	asAdmin := target.Username != actor.Username
+	if err := h.runAs(r.Context(), target.Username, asAdmin, "channel", "delete", ch.Name+"/"+net.GetName()); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -697,4 +868,107 @@ func (h *Handler) handleChannelDelete(w http.ResponseWriter, r *http.Request, ac
 		redirect += "?username=" + target.Username
 	}
 	http.Redirect(w, r, redirect, http.StatusFound)
+}
+
+// --- ignores (self-service; admins may edit other users' via ?username=) ---
+
+func (h *Handler) handleIgnoreAdd(w http.ResponseWriter, r *http.Request, actor *database.User) {
+	target, net, err := h.resolveNetworkForChannels(r.Context(), r, actor)
+	if err != nil {
+		writeResolveError(w, r, err)
+		return
+	}
+
+	mask := strings.TrimSpace(r.FormValue("mask"))
+	if mask == "" {
+		h.renderNetwork(w, r, actor, net, target, "ignore mask can't be empty")
+		return
+	}
+	asAdmin := target.Username != actor.Username
+	if err := h.runAs(r.Context(), target.Username, asAdmin, "ignore", "add", "-network", net.GetName(), "--", mask); err != nil {
+		h.renderNetwork(w, r, actor, net, target, "ignore: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, networkURL(net.ID, target, actor)+"#ignores", http.StatusFound)
+}
+
+func (h *Handler) handleIgnoreDelete(w http.ResponseWriter, r *http.Request, actor *database.User) {
+	target, net, err := h.resolveNetworkForChannels(r.Context(), r, actor)
+	if err != nil {
+		writeResolveError(w, r, err)
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ignores, err := h.DB.ListIgnores(r.Context(), net.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	mask := ""
+	for _, ig := range ignores {
+		if ig.ID == id {
+			mask = ig.Mask
+			break
+		}
+	}
+	if mask == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	asAdmin := target.Username != actor.Username
+	if err := h.runAs(r.Context(), target.Username, asAdmin, "ignore", "delete", "-network", net.GetName(), "--", mask); err != nil {
+		h.renderNetwork(w, r, actor, net, target, "ignore: "+err.Error())
+		return
+	}
+	http.Redirect(w, r, networkURL(net.ID, target, actor)+"#ignores", http.StatusFound)
+}
+
+// networkURL is the network page's URL, carrying ?username= when an admin
+// manages someone else's network.
+func networkURL(netID int64, target, actor *database.User) string {
+	u := "/admin/networks/" + strconv.FormatInt(netID, 10)
+	if target.Username != actor.Username {
+		u += "?username=" + url.QueryEscape(target.Username)
+	}
+	return u
+}
+
+// --- running BouncerServ commands ---
+
+// commandTimeout bounds how long a webadmin request waits on the bouncer.
+const commandTimeout = 15 * time.Second
+
+// runAs runs a BouncerServ command in username's bouncer, so the change
+// applies live and the running bouncer's state stays in sync with the
+// database (see Server.RunCommand). asAdmin must only be true when an admin
+// acts on another user's account, or for admin-only commands.
+func (h *Handler) runAs(ctx context.Context, username string, asAdmin bool, args ...string) error {
+	if h.Srv == nil {
+		return errors.New("the bouncer is not available")
+	}
+	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
+	defer cancel()
+	_, err := h.Srv.RunCommand(ctx, username, asAdmin, args)
+	return err
+}
+
+// flagArg formats a BouncerServ flag as a single "-name=value" word, which
+// both plain bool flags (fs.Bool, needing "=") and value flags accept, and
+// which can't be confused with a following flag when value starts with "-".
+func flagArg(name, value string) string {
+	return "-" + name + "=" + value
+}
+
+// flagIfChanged appends -name=new to args when new differs from old.
+func flagIfChanged(args []string, name, old, new string) []string {
+	if old != new {
+		args = append(args, flagArg(name, new))
+	}
+	return args
 }

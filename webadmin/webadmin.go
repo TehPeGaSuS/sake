@@ -27,16 +27,16 @@ import (
 const sessionCookieName = "sake_admin_session"
 const sessionTTL = 24 * time.Hour
 
-// Handler serves the self-service web admin panel. It is mostly a pure
-// consumer of database.Database and auth.Authenticator - it does not reach
-// into the running Server/user state for account/network/channel
-// management - except for the live session list/disconnect feature, which
-// by nature needs to query the running Server for currently connected
-// downstream clients.
+// Handler serves the self-service web admin panel. It reads from
+// database.Database, but every change goes through Srv as a BouncerServ
+// command run inside the affected user's bouncer (Server.RunCommand), like
+// ZNC's webadmin changing live objects: writing the database directly would
+// leave the running bouncer with stale in-memory state, which it would later
+// write back over the change.
 type Handler struct {
 	DB   database.Database
 	Auth *auth.Authenticator
-	Srv  *sake.Server // used for live session listing/disconnect only
+	Srv  *sake.Server // applies all changes, and lists/disconnects sessions
 
 	secret []byte // HMAC key for session/CSRF signing, persisted across restarts
 	mux    *http.ServeMux
@@ -112,6 +112,9 @@ func (h *Handler) routes() {
 	h.mux.HandleFunc("GET /admin/networks/{netID}/channels/{id}", h.requireLogin(h.handleChannelForm))
 	h.mux.HandleFunc("POST /admin/networks/{netID}/channels/{id}", h.requireLogin(h.handleChannelSave))
 	h.mux.HandleFunc("POST /admin/networks/{netID}/channels/{id}/delete", h.requireLogin(h.handleChannelDelete))
+
+	h.mux.HandleFunc("POST /admin/networks/{netID}/ignores", h.requireLogin(h.handleIgnoreAdd))
+	h.mux.HandleFunc("POST /admin/networks/{netID}/ignores/{id}/delete", h.requireLogin(h.handleIgnoreDelete))
 
 	h.mux.HandleFunc("GET /admin/users", h.requireAdmin(h.handleUserList))
 	h.mux.HandleFunc("GET /admin/users/new", h.requireAdmin(h.handleUserForm))

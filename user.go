@@ -102,6 +102,9 @@ type eventDisconnectSession struct {
 type eventUserRun struct {
 	params []string
 	ch     chan userRunMsg
+	// sake: run with the user's own privileges instead of admin ones, for
+	// webadmin self-service (see Server.RunCommand)
+	asUser bool
 }
 
 type deliveredClientMap map[string]string // client name -> msg ID
@@ -1005,7 +1008,7 @@ func (u *user) run() {
 				// for example to add a network past the user limit.
 				// Non-admin users cannot run user run, not even on themselves,
 				// so this cannot be used to escalate privileges.
-				admin: true,
+				admin: !e.asUser || u.Admin,
 				print: func(text string) {
 					// Avoid blocking on e.print in case our context is canceled.
 					select {
