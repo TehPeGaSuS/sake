@@ -1,6 +1,6 @@
 # no-implicit-names
 
-This specification has been superseded by the IRC `no-implicit-names` extension.
+This specification has been superseded by the IRC [`no-implicit-names`](https://ircv3.net/specs/extensions/no-implicit-names) extension.
 
 ## Description
 

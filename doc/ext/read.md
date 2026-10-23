@@ -1,6 +1,6 @@
 # read
 
-This specification has been superseded by the IRC `draft/read-marker` extension.
+This specification has been superseded by the IRC [`draft/read-marker`](https://ircv3.net/specs/extensions/read-marker) extension.
 
 ## Description
 
