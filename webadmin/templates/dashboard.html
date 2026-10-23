@@ -1,19 +1,36 @@
 {{define "body"}}
-<h1>Networks</h1>
+<header class="page-head">
+  <h1>Networks</h1>
+  <p class="meta">
+    {{if .Live}}<span>{{.Live.Clients}} client{{if ne .Live.Clients 1}}s{{end}} connected</span>{{else}}<span>Your bouncer isn't running</span>{{end}}
+    <span>{{len .Networks}} network{{if ne (len .Networks) 1}}s{{end}}</span>
+  </p>
+</header>
+{{template "flash" .}}
+
+<div class="table-wrap">
 <table>
-<tr><th>Name</th><th>Address</th><th>Nick</th><th>Enabled</th><th></th></tr>
+<thead>
+<tr><th>Network</th><th>Status</th><th class="opt">Nick</th><th class="opt">Server</th><th class="num opt">Channels</th><th class="num">Clients</th></tr>
+</thead>
+<tbody>
 {{range .Networks}}
+{{$ns := netLive $.Live .ID}}
 <tr>
-  <td>{{.Name}}</td>
-  <td>{{.Addr}}</td>
-  <td>{{.Nick}}</td>
-  <td>{{if .Enabled}}yes{{else}}no{{end}}</td>
-  <td><a href="/admin/networks/{{.ID}}">edit</a></td>
+  <td><a class="rowlink" href="/admin/networks/{{.ID}}">{{.GetName}}</a>{{if ne .GetName .Addr}}<span class="sub mono opt">{{.Addr}}</span>{{end}}</td>
+  <td>{{template "netstate" netState $.Live .}}{{with $ns}}{{if .LastError}}<span class="sub clamp" title="{{.LastError}}">{{.LastError}}</span>{{end}}{{end}}</td>
+  <td class="mono opt">{{with $ns}}{{if .Nick}}{{.Nick}}{{if .Away}} <span class="muted">(away)</span>{{end}}{{end}}{{end}}</td>
+  <td class="mono opt">{{with $ns}}{{.Server}}{{end}}</td>
+  <td class="num opt">{{with $ns}}{{joined .}} / {{len .Channels}}{{end}}</td>
+  <td class="num">{{with $ns}}{{.Clients}}{{end}}</td>
 </tr>
 {{else}}
-<tr><td colspan="5" class="muted">No networks yet.</td></tr>
+<tr><td colspan="6" class="empty">You haven't added a network yet. Add one to start connecting to IRC.</td></tr>
 {{end}}
+</tbody>
 </table>
-<p><a class="button" href="/admin/networks/new">Add network</a></p>
+</div>
+<p><a class="button primary" href="/admin/networks/new">Add network</a></p>
 {{end}}
+
 {{template "layout" .}}

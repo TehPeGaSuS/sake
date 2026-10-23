@@ -9,6 +9,8 @@ import (
 	"context"
 	"crypto/sha1"
 	"fmt"
+
+	"github.com/TehPeGaSuS/sake/database"
 )
 
 // RunCommand runs the BouncerServ command params (already split into words)
@@ -62,4 +64,106 @@ func (s *Server) RunCommand(ctx context.Context, username string, asAdmin bool, 
 func UserDeleteToken(username string) string {
 	hashBytes := sha1.Sum([]byte(username))
 	return fmt.Sprintf("%x", hashBytes[0:3])
+}
+
+// UserStatus is a snapshot of a running user's live state.
+type UserStatus struct {
+	Clients  int // registered downstream connections, bound or not
+	Networks map[int64]*NetworkStatus
+}
+
+// NetworkStatus is the live state of one network (see UserStatus).
+type NetworkStatus struct {
+	State     string // "connected", "disconnected" or "disabled"
+	Nick      string
+	Server    string // the upstream's own server name, once registered
+	Account   string
+	Away      bool
+	LastError string
+	Clients   int // downstream connections bound to this network
+	Channels  map[int64]*ChannelStatus
+}
+
+// ChannelStatus is the live state of one saved channel (see NetworkStatus).
+type ChannelStatus struct {
+	Joined  bool
+	Topic   string
+	Modes   string
+	Members int
+}
+
+// UserStatus returns a snapshot of username's live networks and channels,
+// keyed by their database IDs. It returns (nil, nil) if the user isn't
+// running. Safe to call from any goroutine.
+func (s *Server) UserStatus(ctx context.Context, username string) (*UserStatus, error) {
+	u := s.getUser(username)
+	if u == nil {
+		return nil, nil
+	}
+
+	var status UserStatus
+	done := make(chan struct{})
+	ev := eventInspect{
+		done: done,
+		f: func(u *user) {
+			status.Networks = make(map[int64]*NetworkStatus, len(u.networks))
+			for _, net := range u.networks {
+				ns := &NetworkStatus{Channels: make(map[int64]*ChannelStatus)}
+				uc := net.conn
+				switch {
+				case uc != nil:
+					ns.State = "connected"
+					ns.Nick = uc.nick
+					ns.Server = uc.serverName
+					ns.Account = uc.account
+					ns.Away = uc.away
+				case !net.Enabled:
+					ns.State = "disabled"
+				default:
+					ns.State = "disconnected"
+					if net.lastError != nil {
+						ns.LastError = net.lastError.Error()
+					}
+				}
+				net.channels.ForEach(func(_ string, ch *database.Channel) {
+					cs := &ChannelStatus{}
+					if uc != nil {
+						if uch := uc.channels.Get(ch.Name); uch != nil {
+							cs.Joined = true
+							cs.Topic = uch.Topic
+							cs.Members = uch.Members.Len()
+							if uch.modes != nil {
+								cs.Modes, _ = uch.modes.Format()
+							}
+						}
+					}
+					ns.Channels[ch.ID] = cs
+				})
+				status.Networks[net.ID] = ns
+			}
+			for _, dc := range u.downstreamConns {
+				if !dc.registered {
+					continue
+				}
+				status.Clients++
+				if dc.network != nil {
+					if ns := status.Networks[dc.network.ID]; ns != nil {
+						ns.Clients++
+					}
+				}
+			}
+		},
+	}
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case u.events <- ev:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-done:
+		return &status, nil
+	}
 }

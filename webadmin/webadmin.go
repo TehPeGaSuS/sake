@@ -93,6 +93,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) routes() {
+	h.mux.Handle("GET /admin/static/", http.StripPrefix("/admin/", http.FileServerFS(staticFS)))
 	h.mux.HandleFunc("GET /admin/login", h.handleLoginForm)
 	h.mux.HandleFunc("POST /admin/login", h.handleLogin)
 	h.mux.HandleFunc("POST /admin/logout", h.requireLogin(h.handleLogout))

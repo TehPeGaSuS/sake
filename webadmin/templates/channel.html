@@ -1,56 +1,101 @@
 {{define "body"}}
-<h1>{{if .Channel.ID}}Edit channel: {{.Channel.Name}}{{else}}Add channel{{end}}</h1>
-<form method="post" action="/admin/networks/{{.NetworkID}}/channels/{{if .Channel.ID}}{{.Channel.ID}}{{else}}new{{end}}">
-  <input type="hidden" name="csrf" value="{{.CSRF}}">
-  {{if .TargetUsername}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
+{{$q := ""}}{{if .ForOther}}{{$q = printf "?username=%s" .TargetUsername}}{{end}}
+<header class="page-head">
+  <p class="crumbs">{{if .ForOther}}<a href="/admin/users">Users</a> / <a href="/admin/users/{{.TargetUsername}}">{{.TargetUsername}}</a> / {{end}}<a href="/admin/networks/{{.NetworkID}}{{$q}}">{{.Network.GetName}}</a></p>
+  <h1 {{if .Channel.ID}}class="mono"{{end}}>{{if .Channel.ID}}{{.Channel.Name}}{{else}}Add channel{{end}}</h1>
+  {{if .Channel.ID}}
+  <p class="meta">
+    {{template "netstate" chanState .NetLive .Channel}}
+    {{with .ChanLive}}{{if .Joined}}
+      <span>{{.Members}} user{{if ne .Members 1}}s{{end}}</span>
+      {{if .Modes}}<span>modes <span class="mono">{{.Modes}}</span></span>{{end}}
+    {{end}}{{end}}
+  </p>
+  {{with .ChanLive}}{{if .Topic}}<p class="help">{{.Topic}}</p>{{end}}{{end}}
+  {{end}}
+</header>
+{{template "flash" .}}
 
-  <label>Channel name</label>
-  <input type="text" name="name" value="{{.Channel.Name}}" {{if .Channel.ID}}disabled{{end}} required placeholder="#example">
+<form class="settings" method="post" action="/admin/networks/{{.NetworkID}}/channels/{{if .Channel.ID}}{{.Channel.ID}}{{else}}new{{end}}">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{if .ForOther}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
   {{if .Channel.ID}}<input type="hidden" name="name" value="{{.Channel.Name}}">{{end}}
 
-  <label>Key <span class="muted">(channel password, if any)</span></label>
-  <input type="text" name="key" value="{{.Channel.Key}}">
+  <section class="group">
+    <h2>Channel</h2>
+    {{if not .Channel.ID}}
+    <div class="field">
+      <div><label for="name">Name</label><p class="help">sake joins it as soon as you save.</p></div>
+      <div><input type="text" class="mono" id="name" name="name" value="{{.Channel.Name}}" placeholder="#channel" autocapitalize="none" spellcheck="false" required></div>
+    </div>
+    {{end}}
+    <div class="field">
+      <div><label for="key">Key</label><p class="help">The channel password, if it has one.</p></div>
+      <div><input type="text" class="mono" id="key" name="key" value="{{.Channel.Key}}" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    <div class="field">
+      <div><span class="label">Visibility</span></div>
+      <div><label class="check"><input type="checkbox" name="detached" {{if .Channel.Detached}}checked{{end}}> Detached: stay in the channel and keep logging, but hide it from my clients</label></div>
+    </div>
+  </section>
 
-  <label><input type="checkbox" name="detached" {{if .Channel.Detached}}checked{{end}}> Detached <span class="muted">(hidden from clients, but still logged/joined)</span></label>
+  <section class="group">
+    <h2>While detached</h2>
+    <div class="field">
+      <div><label for="relay_detached">Show messages</label><p class="help">Which messages still reach your clients, as notices from BouncerServ.</p></div>
+      <div>
+        <select id="relay_detached" name="relay_detached">
+          <option value="default" {{if eq .Channel.RelayDetached 0}}selected{{end}}>Default (highlights)</option>
+          <option value="none" {{if eq .Channel.RelayDetached 1}}selected{{end}}>None</option>
+          <option value="highlight" {{if eq .Channel.RelayDetached 2}}selected{{end}}>Highlights</option>
+          <option value="message" {{if eq .Channel.RelayDetached 3}}selected{{end}}>All messages</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <div><label for="reattach_on">Reattach on</label><p class="help">Bring the channel back to your clients when this happens.</p></div>
+      <div>
+        <select id="reattach_on" name="reattach_on">
+          <option value="default" {{if eq .Channel.ReattachOn 0}}selected{{end}}>Default (never)</option>
+          <option value="none" {{if eq .Channel.ReattachOn 1}}selected{{end}}>Never</option>
+          <option value="highlight" {{if eq .Channel.ReattachOn 2}}selected{{end}}>A highlight</option>
+          <option value="message" {{if eq .Channel.ReattachOn 3}}selected{{end}}>Any message</option>
+        </select>
+      </div>
+    </div>
+  </section>
 
-  <label>Relay while detached</label>
-  <select name="relay_detached">
-    <option value="default" {{if eq .Channel.RelayDetached 0}}selected{{end}}>Account default</option>
-    <option value="none" {{if eq .Channel.RelayDetached 1}}selected{{end}}>None</option>
-    <option value="highlight" {{if eq .Channel.RelayDetached 2}}selected{{end}}>Highlights only</option>
-    <option value="message" {{if eq .Channel.RelayDetached 3}}selected{{end}}>All messages</option>
-  </select>
+  <section class="group">
+    <h2>Automatic detach</h2>
+    <div class="field">
+      <div><label for="detach_after_minutes">After inactivity</label><p class="help">Minutes without messages before the channel detaches. 0 turns it off.</p></div>
+      <div><input type="number" id="detach_after_minutes" name="detach_after_minutes" min="0" inputmode="numeric" value="{{.DetachAfterMinutes}}"></div>
+    </div>
+    <div class="field">
+      <div><label for="detach_on">Activity that counts</label><p class="help">Which messages reset the inactivity timer.</p></div>
+      <div>
+        <select id="detach_on" name="detach_on">
+          <option value="default" {{if eq .Channel.DetachOn 0}}selected{{end}}>Default (any message)</option>
+          <option value="none" {{if eq .Channel.DetachOn 1}}selected{{end}}>Only my own messages</option>
+          <option value="highlight" {{if eq .Channel.DetachOn 2}}selected{{end}}>Highlights</option>
+          <option value="message" {{if eq .Channel.DetachOn 3}}selected{{end}}>Any message</option>
+        </select>
+      </div>
+    </div>
+  </section>
 
-  <label>Reattach on</label>
-  <select name="reattach_on">
-    <option value="default" {{if eq .Channel.ReattachOn 0}}selected{{end}}>Account default</option>
-    <option value="none" {{if eq .Channel.ReattachOn 1}}selected{{end}}>None</option>
-    <option value="highlight" {{if eq .Channel.ReattachOn 2}}selected{{end}}>Highlights only</option>
-    <option value="message" {{if eq .Channel.ReattachOn 3}}selected{{end}}>Any message</option>
-  </select>
-
-  <label>Auto-detach on</label>
-  <select name="detach_on">
-    <option value="default" {{if eq .Channel.DetachOn 0}}selected{{end}}>Account default</option>
-    <option value="none" {{if eq .Channel.DetachOn 1}}selected{{end}}>None</option>
-    <option value="highlight" {{if eq .Channel.DetachOn 2}}selected{{end}}>Highlights only</option>
-    <option value="message" {{if eq .Channel.DetachOn 3}}selected{{end}}>Any message</option>
-  </select>
-
-  <label>Auto-detach after <span class="muted">(minutes of inactivity, 0 = never)</span></label>
-  <input type="number" name="detach_after_minutes" min="0" value="{{.DetachAfterMinutes}}">
-
-  <div class="actions">
-    <button type="submit">Save</button>
-    {{if .Channel.ID}}<a class="button danger" href="#" onclick="document.getElementById('del').submit(); return false;">Delete</a>{{end}}
+  <div class="form-actions">
+    <button type="submit" class="primary">{{if .Channel.ID}}Save changes{{else}}Add channel{{end}}</button>
+    <a class="button" href="/admin/networks/{{.NetworkID}}{{$q}}#channels">Cancel</a>
+    <span class="spacer"></span>
+    {{if .Channel.ID}}<button type="submit" form="delete-channel" class="danger">Leave and delete</button>{{end}}
   </div>
 </form>
 {{if .Channel.ID}}
-<form id="del" method="post" action="/admin/networks/{{.NetworkID}}/channels/{{.Channel.ID}}/delete">
+<form id="delete-channel" method="post" action="/admin/networks/{{.NetworkID}}/channels/{{.Channel.ID}}/delete" data-confirm="Leave {{.Channel.Name}} and delete it?">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
-  {{if .TargetUsername}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
+  {{if .ForOther}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
 </form>
 {{end}}
-<p><a href="/admin/networks/{{.NetworkID}}{{if .TargetUsername}}?username={{.TargetUsername}}{{end}}">&larr; back to network</a></p>
 {{end}}
 {{template "layout" .}}

@@ -1,117 +1,221 @@
 {{define "body"}}
-<h1>{{if .Network.ID}}Edit network: {{.Network.Name}}{{else}}Add network{{end}}</h1>
-<form method="post" action="/admin/networks/{{if .Network.ID}}{{.Network.ID}}{{else}}new{{end}}">
-  <input type="hidden" name="csrf" value="{{.CSRF}}">
-  {{if .TargetUsername}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
-  <div class="row">
-    <div>
-      <label>Name (short label, e.g. "libera")</label>
-      <input type="text" name="name" value="{{.Network.Name}}">
-    </div>
-    <div>
-      <label>Address (host:port, irc+insecure://, ircs://...)</label>
-      <input type="text" name="addr" value="{{.Network.Addr}}" required>
-    </div>
-  </div>
-  <div class="row">
-    <div><label>Nick</label><input type="text" name="nick" value="{{.Network.Nick}}"></div>
-    <div><label>Username</label><input type="text" name="username_irc" value="{{.Network.Username}}"></div>
-    <div><label>Realname</label><input type="text" name="realname" value="{{.Network.Realname}}"></div>
-  </div>
-  <label>Server password</label>
-  <input type="password" name="pass" value="{{.Network.Pass}}" placeholder="(unchanged)">
-
-  <label>Pinned server TLS certificate <span class="muted">(not for login: this only pins the upstream <em>server's</em> certificate instead of checking it against CAs, for self-signed servers. SHA-256 or SHA-512 hex, colons OK)</span></label>
-  <input type="text" name="certfp" value="{{certFPHex .Network.CertFP}}" placeholder="e.g. AA:BB:CC:... or leave blank">
-
-  <label>SASL mechanism</label>
-  <select name="sasl_mechanism">
-    <option value="" {{if eq .Network.SASL.Mechanism ""}}selected{{end}}>None (clears saved SASL credentials and this network's certificate)</option>
-    <option value="PLAIN" {{if eq .Network.SASL.Mechanism "PLAIN"}}selected{{end}}>PLAIN (username/password)</option>
-    <option value="EXTERNAL" {{if eq .Network.SASL.Mechanism "EXTERNAL"}}selected{{end}}>EXTERNAL (client certificate)</option>
-  </select>
-
-  <div class="row">
-    <div><label>SASL PLAIN username</label><input type="text" name="sasl_username" value="{{.Network.SASL.Plain.Username}}"></div>
-    <div><label>SASL PLAIN password</label><input type="password" name="sasl_password" value="{{.Network.SASL.Plain.Password}}" placeholder="(unchanged)"></div>
-  </div>
-
-  <label>Client certificate for SASL EXTERNAL <span class="muted">(identifies you to the network/services; paste a PEM file with both the certificate and the private key, like ZNC's user.pem. Leave blank to use your account's default certificate instead)</span></label>
-  {{if .ClientCertSHA256}}
-  <p class="muted">Certificate set for this network. Register with services via <code>/msg NickServ CERT ADD {{.ClientCertSHA512}}</code> (fingerprint algorithm depends on the network - some use SHA-256: <code>{{.ClientCertSHA256}}</code>).</p>
-  <label><input type="checkbox" name="remove_client_cert"> Remove this network's certificate {{if .HasDefaultCert}}(falls back to your account default){{end}}</label>
-  {{else if .HasDefaultCert}}
-  <p class="muted">No certificate set for this network - <a href="/admin/account">your account's default certificate</a> will be used.</p>
+{{$q := ""}}{{if .ForOther}}{{$q = printf "?username=%s" .TargetUsername}}{{end}}
+<header class="page-head">
+  {{if .ForOther}}<p class="crumbs"><a href="/admin/users">Users</a> / <a href="/admin/users/{{.TargetUsername}}">{{.TargetUsername}}</a></p>{{end}}
+  <h1>{{if .Network.ID}}{{.Network.GetName}}{{else}}Add network{{end}}</h1>
+  {{if .Network.ID}}
+  <p class="meta">
+    {{template "netstate" netState .Live .Network}}
+    {{with .NetLive}}
+      {{if .Nick}}<span>as <span class="mono">{{.Nick}}</span>{{if .Away}} (away){{end}}</span>{{end}}
+      {{if .Server}}<span>on <span class="mono">{{.Server}}</span></span>{{end}}
+      {{if .Account}}<span>logged in as <span class="mono">{{.Account}}</span></span>{{end}}
+      <span>{{.Clients}} client{{if ne .Clients 1}}s{{end}} attached</span>
+    {{end}}
+  </p>
+  {{with .NetLive}}{{if .LastError}}<p class="help">Last error: {{.LastError}}</p>{{end}}{{end}}
   {{end}}
-  <textarea name="client_cert_pem" rows="6" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----&#10;-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+</header>
+{{template "flash" .}}
 
-  <label><input type="checkbox" name="auto_away" {{if .Network.AutoAway}}checked{{end}}> Auto-away when no clients are attached</label>
-  <label><input type="checkbox" name="enabled" {{if .Network.Enabled}}checked{{end}}> Enabled</label>
-
-  <label>Connect commands <span class="muted">(sent to the server right after connecting, one per line - e.g. to identify with NickServ)</span></label>
-  <textarea name="connect_commands" rows="3">{{range .Network.ConnectCommands}}{{.}}
-{{end}}</textarea>
-
-  {{if .CanSetAdvanced}}
-  <h3>Advanced (admin)</h3>
-  <div class="row">
-    <div><label>Source IP (bind address, overrides account default)</label><input type="text" name="source_ip" value="{{.Network.SourceIP}}"></div>
-  </div>
-  <label><input type="checkbox" name="tls_insecure" {{if .Network.TLSInsecure}}checked{{end}}> Skip TLS certificate verification</label>
-  {{end}}
-
-  <div class="actions">
-    <button type="submit">Save</button>
-    {{if .Network.ID}}<a class="button danger" href="#" onclick="document.getElementById('del').submit(); return false;">Delete</a>{{end}}
-  </div>
-</form>
 {{if .Network.ID}}
-<form id="del" method="post" action="/admin/networks/{{.Network.ID}}/delete">
+<section class="group" id="channels">
+  <h2>Channels</h2>
+  <p class="help">Channels sake joins for you. Detached channels stay joined and logged, but are hidden from your clients.</p>
+  <div class="table-wrap">
+  <table>
+  <thead><tr><th>Channel</th><th>Status</th><th class="num opt">Users</th><th class="opt">Modes</th><th class="opt">Topic</th><th></th></tr></thead>
+  <tbody>
+  {{range .Channels}}
+  {{$cs := chanLive $.NetLive .ID}}
+  <tr>
+    <td><a class="rowlink mono" href="/admin/networks/{{$.Network.ID}}/channels/{{.ID}}{{$q}}">{{.Name}}</a></td>
+    <td>{{template "netstate" chanState $.NetLive .}}</td>
+    <td class="num opt">{{with $cs}}{{if .Joined}}{{.Members}}{{end}}{{end}}</td>
+    <td class="mono opt">{{with $cs}}{{.Modes}}{{end}}</td>
+    <td class="topic opt">{{with $cs}}<span title="{{.Topic}}">{{.Topic}}</span>{{end}}</td>
+    <td class="actions"><a class="button small" href="/admin/networks/{{$.Network.ID}}/channels/{{.ID}}{{$q}}">Edit</a></td>
+  </tr>
+  {{else}}
+  <tr><td colspan="6" class="empty">No saved channels. Channels you join from a client are saved here automatically.</td></tr>
+  {{end}}
+  </tbody>
+  </table>
+  </div>
+  <p><a class="button" href="/admin/networks/{{.Network.ID}}/channels/new{{$q}}">Add channel</a></p>
+</section>
+
+<section class="group" id="ignores">
+  <h2>Ignores</h2>
+  <p class="help">Messages from these senders are still logged, so history and search keep them, but never reach your clients. Masks are case-insensitive <code>nick!user@host</code> patterns with <code>*</code> and <code>?</code>; a bare nick means <code>nick!*@*</code>.</p>
+  <div class="table-wrap">
+  <table>
+  <thead><tr><th>Mask</th><th class="opt">Added</th><th></th></tr></thead>
+  <tbody>
+  {{range .Ignores}}
+  <tr>
+    <td class="mono">{{.Mask}}</td>
+    <td class="muted opt">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+    <td class="actions">
+      <form method="post" action="/admin/networks/{{$.Network.ID}}/ignores/{{.ID}}/delete">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}">
+        {{if $.ForOther}}<input type="hidden" name="username" value="{{$.TargetUsername}}">{{end}}
+        <button type="submit" class="small danger">Remove</button>
+      </form>
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="3" class="empty">Nobody is ignored on this network.</td></tr>
+  {{end}}
+  </tbody>
+  </table>
+  </div>
+  <form method="post" action="/admin/networks/{{.Network.ID}}/ignores" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    {{if .ForOther}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
+    <input type="text" class="mono" name="mask" aria-label="Mask to ignore" placeholder="nick or nick!user@host" autocapitalize="none" spellcheck="false" required>
+    <button type="submit">Ignore</button>
+  </form>
+</section>
+{{end}}
+
+<form class="settings" method="post" action="/admin/networks/{{if .Network.ID}}{{.Network.ID}}{{else}}new{{end}}" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
-  {{if .TargetUsername}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
+  {{if .ForOther}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
+
+  <section class="group">
+    <h2>Server</h2>
+    <div class="field">
+      <div><label for="addr">Address</label><p class="help"><code>host:port</code> connects with TLS. Use <code>irc+insecure://host:port</code> for plain text.</p></div>
+      <div><input type="text" class="mono" id="addr" name="addr" value="{{.Network.Addr}}" placeholder="irc.libera.chat:6697" autocapitalize="none" spellcheck="false" required></div>
+    </div>
+    <div class="field">
+      <div><label for="name">Name</label><p class="help">A short label, used by clients to pick this network.</p></div>
+      <div><input type="text" id="name" name="name" value="{{.Network.Name}}" placeholder="libera" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    <div class="field">
+      <div><label for="pass">Server password</label><p class="help">Only if the server asks for one. Leave blank to keep the saved one.</p></div>
+      <div><input type="password" id="pass" name="pass" placeholder="{{if .Network.Pass}}saved{{end}}" autocomplete="new-password"></div>
+    </div>
+    <div class="field">
+      <div><label for="certfp">Pinned server certificate</label><p class="help">For servers with a self-signed certificate: trust this SHA-256 or SHA-512 fingerprint instead of the usual checks. Not for logging in.</p></div>
+      <div><input type="text" class="mono" id="certfp" name="certfp" value="{{certFPHex .Network.CertFP}}" placeholder="AA:BB:CC:…" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    {{if .CanSetAdvanced}}
+    <div class="field">
+      <div><label for="source_ip">Source IP</label><p class="help">Admin only. Local address to connect from; overrides the account's.</p></div>
+      <div><input type="text" class="mono" id="source_ip" name="source_ip" value="{{.Network.SourceIP}}" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    <div class="field">
+      <div><span class="label">TLS verification</span><p class="help">Admin only.</p></div>
+      <div><label class="check"><input type="checkbox" name="tls_insecure" {{if .Network.TLSInsecure}}checked{{end}}> Skip certificate verification</label></div>
+    </div>
+    {{end}}
+  </section>
+
+  <section class="group">
+    <h2>Identity</h2>
+    <p class="help">Leave blank to use your account defaults.</p>
+    <div class="field">
+      <div><label for="nick">Nick</label></div>
+      <div><input type="text" id="nick" name="nick" value="{{.Network.Nick}}" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    <div class="field">
+      <div><label for="username_irc">Username</label><p class="help">The ident part of <code>nick!user@host</code>.</p></div>
+      <div><input type="text" id="username_irc" name="username_irc" value="{{.Network.Username}}" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    <div class="field">
+      <div><label for="realname">Real name</label></div>
+      <div><input type="text" id="realname" name="realname" value="{{.Network.Realname}}"></div>
+    </div>
+  </section>
+
+  <section class="group" id="certificate">
+    <h2>Client certificate</h2>
+    <p class="help">Sent to the server whenever this network uses TLS, whatever the SASL setting below, so services can log you in by fingerprint (CertFP) and oper blocks can match it.</p>
+    {{if .NoTLS}}<div class="callout"><p>This network's address doesn't use TLS, so no certificate can be sent.</p></div>{{end}}
+    <div class="field certmode">
+      <div><span class="label">Use</span></div>
+      <div>
+        <label class="check"><input type="radio" name="cert_mode" value="account" {{if eq .CertMode "account"}}checked{{end}}>
+          <span>Account certificate{{if not .AccountCert}} <span class="muted">(there isn't one yet, so nothing is sent until you add one on the <a href="{{if .ForOther}}/admin/users/{{.TargetUsername}}{{else}}/admin/account{{end}}#certificate">account page</a>)</span>{{end}}</span></label>
+        <label class="check"><input type="radio" name="cert_mode" value="own" {{if eq .CertMode "own"}}checked{{end}}> <span>This network's own certificate</span></label>
+        <label class="check"><input type="radio" name="cert_mode" value="none" {{if eq .CertMode "none"}}checked{{end}}> <span>None: keep this network from seeing a fingerprint</span></label>
+      </div>
+    </div>
+    {{if eq .CertMode "account"}}{{with .AccountCert}}
+    <div class="field">
+      <div><span class="label">Fingerprint</span><p class="help">The account certificate.</p></div>
+      <div><div class="callout">{{template "certinfo" .}}</div></div>
+    </div>
+    {{end}}{{end}}
+    {{with .OwnCert}}
+    <div class="field own-only">
+      <div><span class="label">Fingerprint</span><p class="help">This network's own certificate.</p></div>
+      <div><div class="callout">{{template "certinfo" .}}</div></div>
+    </div>
+    {{end}}
+    <div class="field own-only">
+      <div><label for="client_cert_file">{{if .OwnCert}}Replace with{{else}}Certificate{{end}}</label><p class="help">Pick or paste a PEM file with both the certificate and its private key, like ZNC's <code>user.pem</code>.</p></div>
+      <div>
+        <input type="file" id="client_cert_file" name="client_cert_file" accept=".pem,.crt,.key,.txt,application/x-pem-file">
+        <textarea id="client_cert_pem" name="client_cert_pem" rows="4" spellcheck="false" aria-label="Or paste the PEM" placeholder="…or paste the PEM here"></textarea>
+        <label class="check"><input type="checkbox" name="generate_cert"> Generate a new certificate instead (RSA 3072)</label>
+      </div>
+    </div>
+  </section>
+
+  <section class="group">
+    <h2>Services login</h2>
+    <div class="field">
+      <div><label for="sasl_mechanism">SASL</label><p class="help">How sake logs you in to services while connecting, before joining channels.</p></div>
+      <div>
+        <select id="sasl_mechanism" name="sasl_mechanism">
+          <option value="" {{if eq .Network.SASL.Mechanism ""}}selected{{end}}>None</option>
+          <option value="PLAIN" {{if eq .Network.SASL.Mechanism "PLAIN"}}selected{{end}}>PLAIN: account name and password</option>
+          <option value="EXTERNAL" {{if eq .Network.SASL.Mechanism "EXTERNAL"}}selected{{end}}>EXTERNAL: the client certificate above</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <div><label for="sasl_username">Account name</label><p class="help">For PLAIN.</p></div>
+      <div><input type="text" id="sasl_username" name="sasl_username" value="{{.Network.SASL.Plain.Username}}" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    <div class="field">
+      <div><label for="sasl_password">Account password</label><p class="help">For PLAIN. Leave blank to keep the saved one.</p></div>
+      <div><input type="password" id="sasl_password" name="sasl_password" placeholder="{{if .Network.SASL.Plain.Password}}saved{{end}}" autocomplete="new-password"></div>
+    </div>
+  </section>
+
+  <section class="group">
+    <h2>Behaviour</h2>
+    <div class="field">
+      <div><span class="label">Connection</span></div>
+      <div>
+        <label class="check"><input type="checkbox" name="enabled" {{if .Network.Enabled}}checked{{end}}> Connected (untick to disconnect and stay offline)</label>
+        <label class="check"><input type="checkbox" name="auto_away" {{if .Network.AutoAway}}checked{{end}}> Mark me away when no client is attached</label>
+      </div>
+    </div>
+    <div class="field">
+      <div><label for="connect_commands">Connect commands</label><p class="help">Raw IRC lines sent right after connecting, one per line.</p></div>
+      <div><textarea id="connect_commands" name="connect_commands" rows="3" spellcheck="false" placeholder="MODE $me +x">{{range .Network.ConnectCommands}}{{.}}
+{{end}}</textarea></div>
+    </div>
+  </section>
+
+  <div class="form-actions">
+    <button type="submit" class="primary">{{if .Network.ID}}Save changes{{else}}Add network{{end}}</button>
+    <span class="spacer"></span>
+    {{if .Network.ID}}<button type="submit" form="delete-network" class="danger">Delete network</button>{{end}}
+  </div>
 </form>
 
-<h2>Channels</h2>
-<table>
-<tr><th>Name</th><th>Detached</th><th></th></tr>
-{{range .Channels}}
-<tr>
-  <td>{{.Name}}</td>
-  <td>{{if .Detached}}yes{{else}}no{{end}}</td>
-  <td><a href="/admin/networks/{{$.Network.ID}}/channels/{{.ID}}{{if $.TargetUsername}}?username={{$.TargetUsername}}{{end}}">edit</a></td>
-</tr>
-{{else}}
-<tr><td colspan="3" class="muted">No channels saved yet.</td></tr>
-{{end}}
-</table>
-<p><a class="button" href="/admin/networks/{{.Network.ID}}/channels/new{{if .TargetUsername}}?username={{.TargetUsername}}{{end}}">Add channel</a></p>
-
-<h2 id="ignores">Ignores</h2>
-<p class="muted">Messages from matching senders are still logged (so history and search keep them), but never delivered live to any of your clients. Masks are case-insensitive <code>nick!user@host</code> globs; a bare nick means <code>nick!*@*</code>.</p>
-<table>
-<tr><th>Mask</th><th>Added</th><th></th></tr>
-{{range .Ignores}}
-<tr>
-  <td><code>{{.Mask}}</code></td>
-  <td class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
-  <td>
-    <form method="post" action="/admin/networks/{{$.Network.ID}}/ignores/{{.ID}}/delete">
-      <input type="hidden" name="csrf" value="{{$.CSRF}}">
-      {{if $.TargetUsername}}<input type="hidden" name="username" value="{{$.TargetUsername}}">{{end}}
-      <button type="submit" class="danger">remove</button>
-    </form>
-  </td>
-</tr>
-{{else}}
-<tr><td colspan="3" class="muted">Nobody is ignored on this network.</td></tr>
-{{end}}
-</table>
-<form method="post" action="/admin/networks/{{.Network.ID}}/ignores" class="row">
+{{if .Network.ID}}
+<form id="delete-network" method="post" action="/admin/networks/{{.Network.ID}}/delete" data-confirm="Delete {{.Network.GetName}}? This disconnects it and removes its channels.">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
-  {{if .TargetUsername}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
-  <div><input type="text" name="mask" placeholder="nick, or nick!user@host with * and ?" required></div>
-  <div class="shrink"><button type="submit">Add ignore</button></div>
+  {{if .ForOther}}<input type="hidden" name="username" value="{{.TargetUsername}}">{{end}}
 </form>
+
 {{end}}
 {{end}}
 {{template "layout" .}}

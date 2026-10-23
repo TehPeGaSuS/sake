@@ -99,6 +99,13 @@ type eventDisconnectSession struct {
 	done chan error
 }
 
+// sake: run f inside the user goroutine, for read-only snapshots of live
+// state (see Server.UserStatus)
+type eventInspect struct {
+	f    func(*user)
+	done chan struct{}
+}
+
 type eventUserRun struct {
 	params []string
 	ch     chan userRunMsg
@@ -998,6 +1005,9 @@ func (u *user) run() {
 			case <-ctx.Done():
 			case e.done <- err:
 			}
+		case eventInspect:
+			e.f(u)
+			close(e.done)
 		case eventUserRun:
 			err := handleServiceCommand(&serviceContext{
 				Context: ctx,

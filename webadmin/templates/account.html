@@ -1,51 +1,50 @@
 {{define "body"}}
-<h1>My account</h1>
-<form method="post" action="/admin/account">
+<header class="page-head">
+  <h1>Account and clients</h1>
+  <p class="meta"><span>Signed in as <span class="mono">{{.User.Username}}</span></span>{{if .User.Admin}}<span>Admin</span>{{end}}</p>
+</header>
+{{template "flash" .}}
+
+<form class="settings" method="post" action="/admin/account" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
-  <label>Username</label>
-  <input type="text" value="{{.User.Username}}" disabled>
-  <label>Nick</label>
-  <input type="text" name="nick" value="{{.User.Nick}}">
-  <label>Realname</label>
-  <input type="text" name="realname" value="{{.User.Realname}}">
-  <label>New password</label>
-  <input type="password" name="password" placeholder="(leave blank to keep current password)">
 
-  <label>Default SASL EXTERNAL client certificate <span class="muted">(used by any network that enables SASL EXTERNAL without its own certificate; paste a PEM file with both the certificate and the private key, like ZNC's user.pem)</span></label>
-  {{if .DefaultCertSHA256}}
-  <p class="muted">Certificate set. Register this with services on networks that use it via <code>/msg NickServ CERT ADD {{.DefaultCertSHA512}}</code> (fingerprint algorithm depends on the network - some use SHA-256: <code>{{.DefaultCertSHA256}}</code>).</p>
-  <label><input type="checkbox" name="remove_default_cert"> Remove this default certificate</label>
-  {{end}}
-  <textarea name="default_cert_pem" rows="6" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----&#10;-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+  <section class="group">
+    <h2>Defaults for your networks</h2>
+    <p class="help">Used by every network that doesn't set its own.</p>
+    <div class="field">
+      <div><label for="nick">Nick</label></div>
+      <div><input type="text" id="nick" name="nick" value="{{.User.Nick}}" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    <div class="field">
+      <div><label for="realname">Real name</label></div>
+      <div><input type="text" id="realname" name="realname" value="{{.User.Realname}}"></div>
+    </div>
+    {{if .CanSetSourceIP}}
+    <div class="field">
+      <div><label for="source_ip">Source IP</label><p class="help">Admin only. Local address to connect from.</p></div>
+      <div><input type="text" class="mono" id="source_ip" name="source_ip" value="{{.User.SourceIP}}" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    {{end}}
+  </section>
 
-  {{if .CanSetSourceIP}}
-  <h3>Advanced (admin)</h3>
-  <label>Default source IP (bind address for all networks, unless overridden)</label>
-  <input type="text" name="source_ip" value="{{.User.SourceIP}}">
-  {{end}}
-  <div class="actions"><button type="submit">Save</button></div>
+  <section class="group">
+    <h2>Password</h2>
+    <div class="field">
+      <div><label for="password">New password</label><p class="help">Changing it disconnects your clients, so they log in again with the new one.</p></div>
+      <div><input type="password" id="password" name="password" autocomplete="new-password"></div>
+    </div>
+  </section>
+
+  {{template "accountcert" .}}
+
+  <div class="form-actions">
+    <button type="submit" class="primary">Save changes</button>
+  </div>
 </form>
 
-<h2>Active sessions</h2>
-<table>
-<tr><th>Client</th><th>Network</th><th>Nick</th><th>Address</th><th>Connected for</th><th></th></tr>
-{{range .Sessions}}
-<tr>
-  <td>{{if .ClientName}}{{.ClientName}}{{else}}<span class="muted">(none)</span>{{end}}</td>
-  <td>{{if .Network}}{{.Network}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
-  <td>{{.Nick}}</td>
-  <td>{{.RemoteAddr}}</td>
-  <td>{{connectedFor .ConnectedAt}}</td>
-  <td>
-    <form method="post" action="/admin/sessions/{{.ID}}/disconnect" onsubmit="return confirm('Disconnect this session?');">
-      <input type="hidden" name="csrf" value="{{$.CSRF}}">
-      <button type="submit" class="danger">Disconnect</button>
-    </form>
-  </td>
-</tr>
-{{else}}
-<tr><td colspan="6" class="muted">No active sessions (or session tracking is unavailable).</td></tr>
-{{end}}
-</table>
+<section class="group" id="clients">
+  <h2>Connected clients</h2>
+  {{template "sessions" .}}
+</section>
 {{end}}
 {{template "layout" .}}

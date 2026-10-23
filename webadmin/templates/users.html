@@ -1,16 +1,26 @@
 {{define "body"}}
-<h1>Users</h1>
+<header class="page-head">
+  <h1>Users</h1>
+  <p class="meta"><span>{{len .Users}} account{{if ne (len .Users) 1}}s{{end}}</span></p>
+</header>
+{{template "flash" .}}
+
+<div class="table-wrap">
 <table>
-<tr><th>Username</th><th>Admin</th><th>Enabled</th><th></th></tr>
+<thead><tr><th>User</th><th>Status</th><th class="num">Networks</th><th class="num">Clients</th><th></th></tr></thead>
+<tbody>
 {{range .Users}}
 <tr>
-  <td>{{.Username}}</td>
-  <td>{{if .Admin}}yes{{else}}no{{end}}</td>
-  <td>{{if .Enabled}}yes{{else}}no{{end}}</td>
-  <td><a href="/admin/users/{{.Username}}">edit</a></td>
+  <td><a class="rowlink mono" href="/admin/users/{{.Username}}">{{.Username}}</a>{{if .Admin}} <span class="muted">admin</span>{{end}}</td>
+  <td>{{if not .Enabled}}{{template "netstate" "disabled"}}{{else if .Live}}{{template "netstate" "running"}}{{else}}{{template "netstate" "unknown"}}{{end}}</td>
+  <td class="num">{{.Networks}}</td>
+  <td class="num">{{with .Live}}{{.Clients}}{{end}}</td>
+  <td class="actions"><a class="button small" href="/admin/users/{{.Username}}">Edit</a></td>
 </tr>
 {{end}}
+</tbody>
 </table>
-<p><a class="button" href="/admin/users/new">Add user</a></p>
+</div>
+<p><a class="button primary" href="/admin/users/new">Add user</a></p>
 {{end}}
 {{template "layout" .}}

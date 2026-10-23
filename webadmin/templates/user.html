@@ -1,26 +1,105 @@
 {{define "body"}}
-<h1>{{if .Existing}}Edit user: {{.User.Username}}{{else}}Add user{{end}}</h1>
-<form method="post" action="/admin/users/{{if .Existing}}{{.User.Username}}{{else}}new{{end}}">
+<header class="page-head">
+  <p class="crumbs"><a href="/admin/users">Users</a></p>
+  <h1 {{if .Existing}}class="mono"{{end}}>{{if .Existing}}{{.User.Username}}{{else}}Add user{{end}}</h1>
+  {{if .Existing}}
+  <p class="meta">
+    {{if not .User.Enabled}}{{template "netstate" "disabled"}}{{else if .Live}}{{template "netstate" "running"}}{{else}}{{template "netstate" "unknown"}}{{end}}
+    {{if .User.Admin}}<span>Admin</span>{{end}}
+    {{with .Live}}<span>{{.Clients}} client{{if ne .Clients 1}}s{{end}} connected</span>{{end}}
+  </p>
+  {{end}}
+</header>
+{{template "flash" .}}
+
+<form class="settings" method="post" action="/admin/users/{{if .Existing}}{{.User.Username}}{{else}}new{{end}}" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
-  <label>Username</label>
-  <input type="text" name="username" value="{{.User.Username}}" {{if .Existing}}disabled{{end}} required>
-  <label>Password{{if .Existing}} (leave blank to keep current){{end}}</label>
-  <input type="password" name="password" {{if not .Existing}}required{{end}}>
-  <label>Nick</label>
-  <input type="text" name="nick" value="{{.User.Nick}}">
-  <label>Realname</label>
-  <input type="text" name="realname" value="{{.User.Realname}}">
-  <label>Default source IP (bind address)</label>
-  <input type="text" name="source_ip" value="{{.User.SourceIP}}">
-  <label>Max networks (-1 = unlimited)</label>
-  <input type="number" name="max_networks" value="{{.User.MaxNetworks}}">
-  <label><input type="checkbox" name="admin" {{if .User.Admin}}checked{{end}}> Admin</label>
-  <label><input type="checkbox" name="enabled" {{if .User.Enabled}}checked{{end}}> Enabled</label>
-  <div class="actions">
-    <button type="submit">Save</button>
-    {{if .Existing}}<a class="button danger" href="#" onclick="document.getElementById('del').submit(); return false;">Delete</a>{{end}}
+
+  <section class="group">
+    <h2>Login</h2>
+    {{if not .Existing}}
+    <div class="field">
+      <div><label for="username">Username</label></div>
+      <div><input type="text" class="mono" id="username" name="username" value="{{.User.Username}}" autocapitalize="none" spellcheck="false" required></div>
+    </div>
+    {{end}}
+    <div class="field">
+      <div><label for="password">{{if .Existing}}New password{{else}}Password{{end}}</label>{{if .Existing}}<p class="help">Leave blank to keep the current one. Changing it disconnects their clients.</p>{{end}}</div>
+      <div><input type="password" id="password" name="password" autocomplete="new-password" {{if not .Existing}}required{{end}}></div>
+    </div>
+    <div class="field">
+      <div><span class="label">Access</span></div>
+      <div>
+        <label class="check"><input type="checkbox" name="enabled" {{if .User.Enabled}}checked{{end}}> Enabled: can log in and stay connected</label>
+        <label class="check"><input type="checkbox" name="admin" {{if .User.Admin}}checked{{end}}> Admin: can manage every user</label>
+      </div>
+    </div>
+  </section>
+
+  <section class="group">
+    <h2>Defaults for their networks</h2>
+    <div class="field">
+      <div><label for="nick">Nick</label></div>
+      <div><input type="text" id="nick" name="nick" value="{{.User.Nick}}" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    <div class="field">
+      <div><label for="realname">Real name</label></div>
+      <div><input type="text" id="realname" name="realname" value="{{.User.Realname}}"></div>
+    </div>
+    <div class="field">
+      <div><label for="source_ip">Source IP</label><p class="help">Local address to connect from.</p></div>
+      <div><input type="text" class="mono" id="source_ip" name="source_ip" value="{{.User.SourceIP}}" autocapitalize="none" spellcheck="false"></div>
+    </div>
+    <div class="field">
+      <div><label for="max_networks">Network limit</label><p class="help">-1 for no limit.</p></div>
+      <div><input type="number" id="max_networks" name="max_networks" min="-1" inputmode="numeric" value="{{.User.MaxNetworks}}"></div>
+    </div>
+  </section>
+
+  {{template "accountcert" .}}
+
+  <div class="form-actions">
+    <button type="submit" class="primary">{{if .Existing}}Save changes{{else}}Add user{{end}}</button>
+    <a class="button" href="/admin/users">Cancel</a>
+    <span class="spacer"></span>
+    {{if .Existing}}<button type="submit" form="delete-user" class="danger">Delete user</button>{{end}}
   </div>
 </form>
-{{if .Existing}}<form id="del" method="post" action="/admin/users/{{.User.Username}}/delete"><input type="hidden" name="csrf" value="{{.CSRF}}"></form>{{end}}
+
+{{if .Existing}}
+<form id="delete-user" method="post" action="/admin/users/{{.User.Username}}/delete" data-confirm="Delete {{.User.Username}}? This disconnects them and removes all their networks.">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+</form>
+
+<section class="group" id="networks">
+  <h2>Networks</h2>
+  <div class="table-wrap">
+  <table>
+  <thead><tr><th>Network</th><th>Status</th><th class="opt">Nick</th><th class="opt">Server</th><th class="num opt">Channels</th><th class="num">Clients</th></tr></thead>
+  <tbody>
+  {{range .Networks}}
+  {{$ns := netLive $.Live .ID}}
+  <tr>
+    <td><a class="rowlink" href="/admin/networks/{{.ID}}?username={{$.User.Username}}">{{.GetName}}</a></td>
+    <td>{{template "netstate" netState $.Live .}}</td>
+    <td class="mono opt">{{with $ns}}{{.Nick}}{{end}}</td>
+    <td class="mono opt">{{with $ns}}{{.Server}}{{end}}</td>
+    <td class="num opt">{{with $ns}}{{joined .}} / {{len .Channels}}{{end}}</td>
+    <td class="num">{{with $ns}}{{.Clients}}{{end}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="6" class="empty">No networks.</td></tr>
+  {{end}}
+  </tbody>
+  </table>
+  </div>
+  <p><a class="button" href="/admin/networks/new?username={{.User.Username}}">Add network for {{.User.Username}}</a></p>
+</section>
+
+<section class="group" id="clients">
+  <h2>Connected clients</h2>
+  {{template "sessions" .}}
+</section>
+{{end}}
 {{end}}
 {{template "layout" .}}
