@@ -4095,10 +4095,11 @@ func parseNickServCredentials(text, nick string) (username, password string, ok 
 			password = params[1]
 		}
 	case "SET":
-		if len(params) == 2 && strings.EqualFold(params[0], "PASSWORD") {
-			username = nick
-			password = params[1]
+		if len(params) != 2 || !strings.EqualFold(params[0], "PASSWORD") {
+			return "", "", false
 		}
+		username = nick
+		password = params[1]
 	default:
 		return "", "", false
 	}

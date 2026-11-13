@@ -1,5 +1,7 @@
 # account-required
 
+This specification has been superseded by the [`draft/ACCOUNTREQUIRED`](https://ircv3.net/specs/extensions/account-registration#isupport-token) ISUPPORT token.
+
 This specification defines the informational `soju.im/account-required`
 capability. If present, it indicates that the connection to the server cannot
 be completed unless the clients authenticates, typically via SASL. Note, the
